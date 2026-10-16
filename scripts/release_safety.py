@@ -169,7 +169,7 @@ def check_repository(root: Path, *, verify_cargo_metadata: bool = False) -> list
             'cache-bin: "true"',
             "save-if: $" + "{{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}",
         )
-        cache_lines = [line.strip() for line in cache if not line.lstrip().startswith("#")]
+        cache_lines = [line.split(" #", 1)[0].strip() for line in cache if not line.lstrip().startswith("#")]
         if not cache or expected_cache[0] not in cache_lines:
             issues.append("Audit tool cache must use the pinned trusted action")
         if expected_cache[1] not in cache_lines:
