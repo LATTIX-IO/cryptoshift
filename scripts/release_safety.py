@@ -149,6 +149,34 @@ def check_repository(root: Path, *, verify_cargo_metadata: bool = False) -> list
             issues.append("CI must enforce the release safety guard with Cargo metadata")
         if disabled_job or not executable_step(checks, "Release safety regression tests", 'python3 -m unittest discover -s scripts -p "test_release_safety.py" -v'):
             issues.append("CI must execute release safety regression tests")
+
+        supply = job_lines(ci, "supply-chain")
+        supply_disabled = not supply or any(
+            re.match(r"^    (?:if|continue-on-error):", line) for line in supply
+        )
+        for name, command in (
+            ("RustSec audit", "cargo audit"),
+            ("Dependency policy", "cargo deny check"),
+            ("SemVer compatibility", "cargo semver-checks check-release --workspace --all-features"),
+        ):
+            if supply_disabled or not executable_step(supply, name, command):
+                issues.append(f"Supply-chain CI must execute {name}")
+        if not any(
+            "uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3" in line
+            for line in supply
+        ):
+            issues.append("Audit tool cache must use the pinned trusted action")
+        if not any(
+            line.strip() == "save-if: $" + "{{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
+            for line in supply
+        ):
+            issues.append("Supply-chain cache must only be writable on trusted main pushes")
+        if not any(line.strip() == 'cache-bin: "true"' for line in supply):
+            issues.append("Supply-chain cache must explicitly include installed binaries")
+        if not any("key: audit-0.22.2-deny-0.20.2-semver-0.51.0" in line for line in supply):
+            issues.append("Audit tool versions must have a distinct versioned cache key")
+        if not any(line.strip() == "contents: read" for line in ci.splitlines()):
+            issues.append("CI requires read-only workflow permissions")
     except OSError as exc:
         issues.append(f"Missing CI workflow: {exc}")
 

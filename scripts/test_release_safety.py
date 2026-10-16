@@ -132,3 +132,47 @@ class ReleaseSafetyTests(unittest.TestCase):
         self.mutate(".github/workflows/ci.yml", "- name: Release safety regression tests\n        run:", "- name: Release safety regression tests\n        if: false\n        run:")
         self.reject("CI must execute release safety regression tests")
 
+    def test_missing_supply_chain_job(self):
+        """Removing independent supply-chain verification must fail closed."""
+        self.mutate(".github/workflows/ci.yml", "  supply-chain:", "  removed-supply-chain:")
+        self.reject("Supply-chain CI must execute RustSec audit")
+
+    def test_disabled_supply_chain_job(self):
+        """Skipping the entire audit job is not an acceptable optimization."""
+        self.mutate(".github/workflows/ci.yml", "  supply-chain:\n    name:", "  supply-chain:\n    if: false\n    name:")
+        self.reject("Supply-chain CI must execute RustSec audit")
+
+    def test_disabled_rustsec_step(self):
+        """Presence of an audit command alone is insufficient."""
+        self.mutate(".github/workflows/ci.yml", "- name: RustSec audit\n        run:", "- name: RustSec audit\n        if: false\n        run:")
+        self.reject("Supply-chain CI must execute RustSec audit")
+
+    def test_disabled_deny_step(self):
+        """Dependency policy cannot be silenced."""
+        self.mutate(".github/workflows/ci.yml", "- name: Dependency policy\n        run:", "- name: Dependency policy\n        continue-on-error: true\n        run:")
+        self.reject("Supply-chain CI must execute Dependency policy")
+
+    def test_skipped_semver_step(self):
+        """SemVer checks are independently required."""
+        self.mutate(".github/workflows/ci.yml", "run: cargo semver-checks check-release --workspace --all-features", "run: echo skipped")
+        self.reject("Supply-chain CI must execute SemVer compatibility")
+
+    def test_untrusted_pull_request_cache_write(self):
+        """Untrusted pull requests cannot populate the main audit tool cache."""
+        expected = "save-if: $" + "{{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
+        self.mutate(".github/workflows/ci.yml", expected, "save-if: true")
+        self.reject("Supply-chain cache must only be writable")
+
+    def test_cache_key_must_include_pinned_versions(self):
+        """A cache from older audit tooling cannot silently substitute."""
+        self.mutate(".github/workflows/ci.yml", "audit-0.22.2-deny-0.20.2-semver-0.51.0", "audit-floating")
+        self.reject("Audit tool versions must have")
+
+    def test_audit_cache_action_must_remain_pinned(self):
+        """The audit job cannot use a floating action revision."""
+        ci = (self.root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        needle = "uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3"
+        self.assertEqual(ci.count(needle), 2)
+        self.put(".github/workflows/ci.yml", ci.replace(needle, "uses: Swatinem/rust-cache@v2"))
+        self.reject("Audit tool cache must use the pinned trusted action")
+
