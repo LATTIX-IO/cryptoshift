@@ -1,16 +1,12 @@
 # cryptoshift
 
-$CrateName is part of the Lattix open-source ecosystem.
+The `cryptoshift` crate is part of the Lattix open-source ecosystem.
 
-This crate is under active development. The initial release establishes the
-public package namespace and project boundary while the production API is
-developed.
+This crate is a non-publishable bootstrap placeholder. It has no supported
+migration-planning API; the first public release requires separately approved
+release work (FOSS-456).
 
 Repository: https://github.com/LATTIX-IO/cryptoshift
-
-## Status
-
-Early development. APIs prior to 1.0 may change.
 
 ## License
 
