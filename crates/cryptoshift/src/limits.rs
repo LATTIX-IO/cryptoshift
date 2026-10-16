@@ -293,8 +293,10 @@ mod tests {
 
     #[test]
     fn zero_and_above_ceiling_are_invalid() {
-        let mut limits = Limits::default();
-        limits.max_graph_nodes = 0;
+        let mut limits = Limits {
+            max_graph_nodes: 0,
+            ..Limits::default()
+        };
         assert!(matches!(
             limits.validate(),
             Err(Diagnostic {
