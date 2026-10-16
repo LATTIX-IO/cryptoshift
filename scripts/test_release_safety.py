@@ -176,3 +176,34 @@ class ReleaseSafetyTests(unittest.TestCase):
         self.put(".github/workflows/ci.yml", ci.replace(needle, "uses: Swatinem/rust-cache@v2"))
         self.reject("Audit tool cache must use the pinned trusted action")
 
+    def test_cache_policy_not_satisfied_by_unrelated_step(self):
+        """Only inputs of the pinned cache action can authorize cache writes."""
+        path = ".github/workflows/ci.yml"
+        ci = (self.root / path).read_text(encoding="utf-8")
+        expected = "save-if: $" + "{{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
+        pos = ci.index("  supply-chain:")
+        before, supply = ci[:pos], ci[pos:]
+        self.assertIn(expected, supply)
+        supply = supply.replace(expected, "save-if: true", 1)
+        supply += "\n      - name: Ignored decoy\n        with:\n          " + expected + "\n"
+        self.put(path, before + supply)
+        self.reject("Supply-chain cache must only be writable")
+
+    def test_job_level_permission_escalation(self):
+        """A write token on the auditing job violates the read-only policy."""
+        self.mutate(
+            ".github/workflows/ci.yml",
+            "  supply-chain:\n    name:",
+            "  supply-chain:\n    permissions: write-all\n    name:",
+        )
+        self.reject("CI requires read-only workflow permissions")
+
+    def test_top_level_write_all_permission(self):
+        """A misleading contents: read elsewhere cannot replace the top-level policy."""
+        self.mutate(
+            ".github/workflows/ci.yml",
+            "permissions:\n  contents: read\n",
+            "permissions: write-all\n",
+        )
+        self.reject("CI requires read-only workflow permissions")
+
