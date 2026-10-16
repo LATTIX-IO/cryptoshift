@@ -41,6 +41,46 @@ def section_keys(workflow: str, section: str) -> list[str]:
     return keys
 
 
+
+EXPECTED_RELEASE_IF = (
+    "if: $" + "{{ github.repository_owner == 'LATTIX-IO' && "
+    "github.ref == 'refs/heads/main' && inputs.prepare_release_pr }}"
+)
+
+
+def job_lines(workflow: str, name: str) -> list[str]:
+    """Return exactly one two-space YAML job body, otherwise fail closed."""
+    lines = workflow.splitlines()
+    headers = [i for i, line in enumerate(lines) if re.fullmatch(r"  [a-zA-Z_][\w-]*:\s*", line)]
+    matching = [i for i in headers if lines[i].strip() == f"{name}:"]
+    if len(matching) != 1 or not re.search(r"(?m)^jobs:\s*$", workflow):
+        return []
+    start = matching[0]
+    end = next((i for i in headers if i > start), len(lines))
+    return lines[start + 1 : end]
+
+
+def named_step(job: list[str], name: str) -> list[str]:
+    """Extract one named step without accidentally accepting comments as code."""
+    starts = [i for i, line in enumerate(job) if line.startswith("      - ")]
+    matching = [i for i in starts if job[i].strip() == f"- name: {name}"]
+    if len(matching) != 1:
+        return []
+    start = matching[0]
+    end = next((i for i in starts if i > start), len(job))
+    return job[start + 1 : end]
+
+
+def executable_step(job: list[str], name: str, run_command: str) -> bool:
+    """Demand a concrete unconditioned, non-ignored command in its own step."""
+    step = named_step(job, name)
+    return bool(step) and [line.strip() for line in step if re.match(r"^        run:", line)] == [f"run: {run_command}"] and not any(
+        re.match(r"^        (?:if|continue-on-error):", line) for line in step
+    )
+
+
+
+
 def check_repository(root: Path, *, verify_cargo_metadata: bool = False) -> list[str]:
     """Return all detected unsafe release settings; empty means the gate passes."""
     issues: list[str] = []
@@ -88,7 +128,9 @@ def check_repository(root: Path, *, verify_cargo_metadata: bool = False) -> list
             issues.append("Manual release-pr command must be preserved")
         if not re.search(r"release-plz/action@[a-f0-9]{40}\b", release):
             issues.append("Release-plz action must be pinned to a commit SHA")
-        if "inputs.prepare_release_pr" not in release or "refs/heads/main" not in release:
+        release_job = job_lines(release, "release-plz-pr")
+        conditions = [line.strip() for line in release_job if line.startswith("    if:")]
+        if conditions != [EXPECTED_RELEASE_IF]:
             issues.append("Manual release-PR preparation must require confirmation on main")
         if "persist-credentials: false" not in release:
             issues.append("Checkout must not persist credentials in the release workflow")
@@ -99,9 +141,13 @@ def check_repository(root: Path, *, verify_cargo_metadata: bool = False) -> list
 
     try:
         ci = (root / CI_WORKFLOW).read_text(encoding="utf-8")
-        if not re.search(r"(?m)^\s*run: python3 scripts/release_safety\.py --with-cargo\s*$", ci):
+        checks = job_lines(ci, "rust-checks")
+        disabled_job = not checks or any(
+            re.match(r"^    (?:if|continue-on-error):", line) for line in checks
+        )
+        if disabled_job or not executable_step(checks, "Reject unsafe release settings", "python3 scripts/release_safety.py --with-cargo"):
             issues.append("CI must enforce the release safety guard with Cargo metadata")
-        if "unittest discover -s scripts -p" not in ci:
+        if disabled_job or not executable_step(checks, "Release safety regression tests", 'python3 -m unittest discover -s scripts -p "test_release_safety.py" -v'):
             issues.append("CI must execute release safety regression tests")
     except OSError as exc:
         issues.append(f"Missing CI workflow: {exc}")
