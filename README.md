@@ -8,10 +8,8 @@ Project website: https://lattix.io
 
 ## Status
 
-This project is in early development.
-
-Public APIs should be considered unstable until the relevant crates reach
-their first stable release.
+This project is a **non-publishable bootstrap workspace**. There is no usable
+migration-planning API yet. No public crates.io release is authorized.
 
 ## Crates
 
@@ -19,32 +17,35 @@ their first stable release.
 
 ## Development
 
-Run:
-
     cargo fmt --all -- --check
-    cargo check --workspace --all-targets --all-features
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
-    cargo test --workspace --all-features
+    cargo check --workspace --all-targets --all-features --locked
+    cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+    cargo test --workspace --all-features --locked
 
-## Publishing
+## Release safety
 
-All crates are bootstrapped with publish = false.
+All workspace crate manifests explicitly declare `publish = false`. Release-plz
+is **manual, release-PR preparation only**, with an explicit confirmation input
+and only from `main`. Neither the workflow nor normal pushes publish packages
+or receive crates.io publishing credentials.
 
-Before enabling publication for a crate:
+Run the safety and negative regression checks using Python 3.11+ and Rust:
 
-1. Re-check the exact package name on crates.io.
-2. Complete the public API and crate documentation.
-3. Add tests for supported behavior.
-4. Add crate-specific keywords/categories where appropriate.
-5. Review dependency licenses and security posture.
-6. Remove publish = false only for that crate.
-7. Publish deliberately.
+    python3 scripts/release_safety.py --with-cargo
+    python3 -m unittest discover -s scripts -p "test_release_safety.py" -v
+    cargo package --locked --list -p cryptoshift
+
+The package listing is a non-publishing inspection, not a publication test.
+
+Before a future release, FOSS-456 must define controlled publishing with
+appropriate environment approvals, validate package ownership on crates.io,
+complete API and documentation, MSRV and clean-room consumer verification,
+security scans, SBOM and provenance, and deliberately change both the manifest
+and release guard in a reviewed release PR. No release is authorized by FOSS-414.
+
+Repository-local configuration checks do not substitute for administrative
+branch protections or protected GitHub environments.
 
 ## License
 
-Licensed under either:
-
-- Apache License, Version 2.0
-- MIT License
-
-at your option.
+Licensed under Apache-2.0 or MIT, at your option.

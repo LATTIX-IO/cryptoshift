@@ -2,11 +2,9 @@ name: Rust CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,51 +14,45 @@ jobs:
   rust-checks:
     name: Rust checks
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           persist-credentials: false
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # stable
         with:
           toolchain: stable
           components: rustfmt, clippy
-
+      - name: Reject unsafe release settings
+        run: python3 scripts/release_safety.py --with-cargo
+      - name: Release safety regression tests
+        run: python3 -m unittest discover -s scripts -p "test_release_safety.py" -v
+      - name: Inspect Cargo package without publishing
+        run: cargo package --locked --list -p cryptoshift
       - name: Cache Cargo
         uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2.9.2
-
       - name: Format
         run: cargo fmt --all -- --check
-
       - name: Check
         run: cargo check --workspace --all-targets --all-features --locked
-
       - name: Clippy
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-
       - name: Test
         run: cargo test --workspace --all-features --locked
-
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --all-features --no-deps --locked
-
       - name: Install supply-chain tools
         run: |
           cargo install --locked cargo-audit
           cargo install --locked cargo-deny
           cargo install --locked cargo-semver-checks
-
       - name: RustSec audit
         run: cargo audit
-
       - name: Dependency policy
         run: cargo deny check
-
       - name: SemVer compatibility
         run: cargo semver-checks check-release --workspace --all-features
