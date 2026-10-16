@@ -161,21 +161,27 @@ def check_repository(root: Path, *, verify_cargo_metadata: bool = False) -> list
         ):
             if supply_disabled or not executable_step(supply, name, command):
                 issues.append(f"Supply-chain CI must execute {name}")
-        if not any(
-            "uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3" in line
-            for line in supply
-        ):
+        # All trust assertions are bound to the single actual named cache step.
+        cache = named_step(supply, "Cache pinned audit tool binaries from trusted main")
+        expected_cache = (
+            "uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3",
+            "key: audit-0.22.2-deny-0.20.2-semver-0.51.0",
+            'cache-bin: "true"',
+            "save-if: $" + "{{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}",
+        )
+        cache_lines = [line.strip() for line in cache if not line.lstrip().startswith("#")]
+        if not cache or expected_cache[0] not in cache_lines:
             issues.append("Audit tool cache must use the pinned trusted action")
-        if not any(
-            line.strip() == "save-if: $" + "{{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
-            for line in supply
-        ):
-            issues.append("Supply-chain cache must only be writable on trusted main pushes")
-        if not any(line.strip() == 'cache-bin: "true"' for line in supply):
-            issues.append("Supply-chain cache must explicitly include installed binaries")
-        if not any("key: audit-0.22.2-deny-0.20.2-semver-0.51.0" in line for line in supply):
+        if expected_cache[1] not in cache_lines:
             issues.append("Audit tool versions must have a distinct versioned cache key")
-        if not any(line.strip() == "contents: read" for line in ci.splitlines()):
+        if expected_cache[2] not in cache_lines:
+            issues.append("Supply-chain cache must explicitly include installed binaries")
+        if expected_cache[3] not in cache_lines or len([line for line in cache_lines if line.startswith("save-if:")]) != 1:
+            issues.append("Supply-chain cache must only be writable on trusted main pushes")
+        # Job-level permissions override the workflow-level read-only token.
+        if not re.search(r"(?m)^permissions:\n  contents: read\n(?:\n|jobs:)", ci) or any(
+            re.match(r"^    permissions:", line) for line in [*checks, *supply]
+        ):
             issues.append("CI requires read-only workflow permissions")
     except OSError as exc:
         issues.append(f"Missing CI workflow: {exc}")
