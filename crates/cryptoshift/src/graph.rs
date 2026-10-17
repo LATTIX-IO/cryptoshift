@@ -1,8 +1,8 @@
 //! Typed, deterministic, source-evidence-bound cryptographic dependency graph.
 //! This validates only topology and evidence, not quantum risk or safe migration.
 
-use std::collections::{BTreeMap, BTreeSet};
 use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::inventory::{CryptoUseKind, SnapshotDigest, ValidatedInventorySnapshot};
 use crate::{Diagnostic, DiagnosticCode, Limits, ResourceKind};

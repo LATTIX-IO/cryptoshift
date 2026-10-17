@@ -89,7 +89,6 @@ fn fixture(
     let topology = DependencyAnalysis::analyze(&graph, &limits)?;
     Ok((inventory, graph, topology))
 }
-
 fn complete_context(origin: ClaimOrigin, source_digest: SnapshotDigest) -> Vec<ContextAssessment> {
     RiskFactorKind::ALL
         .iter()
@@ -199,7 +198,11 @@ fn fully_attributed_inputs_yield_inspectable_versioned_score() -> Result<(), Dia
         ConflictState::Uncontested,
         EvidenceBasis::Direct,
     )?;
-    let quantum = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?)];
+    let quantum = [classification(
+        ClaimOrigin::AnalystAssessment,
+        QuantumPosture::Susceptible,
+        digest(&data.0)?,
+    )];
     let mut context = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     let profile = score_profile()?;
     let baseline = assess(
@@ -271,7 +274,11 @@ fn configured_or_library_capability_never_becomes_active_use() -> Result<(), Dia
             ConflictState::Uncontested,
             EvidenceBasis::Direct,
         )?;
-        let profiles = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?)];
+        let profiles = [classification(
+            ClaimOrigin::AnalystAssessment,
+            QuantumPosture::Susceptible,
+            digest(&data.0)?,
+        )];
         let context = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
         let report = assess(
             &data,
@@ -304,7 +311,11 @@ fn uncertainty_survives_known_severe_exposure() -> Result<(), Diagnostic> {
         ConflictState::Conflicted,
         EvidenceBasis::Inferred,
     )?;
-    let profile = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?)];
+    let profile = [classification(
+        ClaimOrigin::AnalystAssessment,
+        QuantumPosture::Susceptible,
+        digest(&data.0)?,
+    )];
     let context = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     let report = assess(
         &data,
@@ -337,7 +348,11 @@ fn incomplete_collection_and_scenario_assumptions_never_score() -> Result<(), Di
         EvidenceBasis::Direct,
     )?;
     let context = complete_context(ClaimOrigin::ScenarioAssumption, digest(&data.0)?);
-    let profile = [classification(ClaimOrigin::ScenarioAssumption, QuantumPosture::CandidateResistant, digest(&data.0)?)];
+    let profile = [classification(
+        ClaimOrigin::ScenarioAssumption,
+        QuantumPosture::CandidateResistant,
+        digest(&data.0)?,
+    )];
     let report = assess(
         &data,
         &profile,
@@ -408,7 +423,11 @@ fn missing_second_profile_cannot_be_masked_by_a_known_severe_use() -> Result<(),
     let bound = EvidenceGraph::new(&snapshot, nodes, edges, &Limits::default())?;
     let topology = DependencyAnalysis::analyze(&bound, &Limits::default())?;
     let input = (snapshot, bound, topology);
-    let profile = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&input.0)?)];
+    let profile = [classification(
+        ClaimOrigin::AnalystAssessment,
+        QuantumPosture::Susceptible,
+        digest(&input.0)?,
+    )];
     let report = assess(
         &input,
         &profile,
@@ -434,7 +453,11 @@ fn invalid_sources_duplicates_and_derived_factor_overrides_rejected() -> Result<
         ConflictState::Uncontested,
         EvidenceBasis::Direct,
     )?;
-    let p = classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?);
+    let p = classification(
+        ClaimOrigin::AnalystAssessment,
+        QuantumPosture::Susceptible,
+        digest(&data.0)?,
+    );
     let check = |q: Vec<QuantumAssessment>, c: Vec<ContextAssessment>| {
         assess(&data, &q, &c, None, &Limits::default())
             .err()
@@ -555,7 +578,11 @@ fn invalid_profiles_and_tight_resource_budgets_fail_closed() -> Result<(), Diagn
         EvidenceBasis::Direct,
     )?;
     let contexts = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
-    let profiles = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?)];
+    let profiles = [classification(
+        ClaimOrigin::AnalystAssessment,
+        QuantumPosture::Susceptible,
+        digest(&data.0)?,
+    )];
     let cases = [
         Limits {
             max_planner_candidates: 9,
@@ -626,12 +653,8 @@ fn topology_must_match_exact_graph_not_only_inventory_digest() -> Result<(), Dia
         ConflictState::Uncontested,
         EvidenceBasis::Direct,
     )?;
-    let alternate = EvidenceGraph::new(
-        &data.0,
-        data.1.nodes().to_vec(),
-        vec![],
-        &Limits::default(),
-    )?;
+    let alternate =
+        EvidenceGraph::new(&data.0, data.1.nodes().to_vec(), vec![], &Limits::default())?;
     let alternate_topology = DependencyAnalysis::analyze(&alternate, &Limits::default())?;
     assert_eq!(data.1.source_digest(), alternate.source_digest());
     assert_ne!(data.1.fingerprint(), alternate.fingerprint());
@@ -646,7 +669,8 @@ fn topology_must_match_exact_graph_not_only_inventory_digest() -> Result<(), Dia
             None,
             &Limits::default(),
         )
-        .err().map(|e| e.code),
+        .err()
+        .map(|e| e.code),
         Some(DiagnosticCode::IntegrityMismatch)
     );
 
@@ -663,8 +687,7 @@ fn topology_must_match_exact_graph_not_only_inventory_digest() -> Result<(), Dia
 }
 
 #[test]
-fn both_endpoints_of_dependency_edge_must_charge_evidence_index_budget()
--> Result<(), Diagnostic> {
+fn both_endpoints_of_dependency_edge_must_charge_evidence_index_budget() -> Result<(), Diagnostic> {
     let data = fixture(
         false,
         CryptoUseKind::ActiveUse,
@@ -698,7 +721,8 @@ fn both_endpoints_of_dependency_edge_must_charge_evidence_index_budget()
     };
     assert_eq!(
         RiskAnalysis::analyze(&data.0, &graph, &topology, &[], &[], None, &limits)
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::ResourceLimitExceeded)
     );
     Ok(())
