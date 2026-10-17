@@ -211,7 +211,10 @@ fn advertised_capability_is_neither_deployed_nor_negotiated() -> Result<(), Diag
     );
     assert_eq!(runtime.record_ids, ["runtime-proof"]);
     assert_eq!(runtime.evidence_refs.len(), 1);
-    assert_eq!(runtime.evidence_refs[0].source_id, "external-validation-team");
+    assert_eq!(
+        runtime.evidence_refs[0].source_id,
+        "external-validation-team"
+    );
     assert_eq!(runtime.evidence_refs[0].evidence_id, "test-run-472");
     assert_eq!(runtime.evidence_refs[0].source_revision, "runtime-check-r1");
     assert_eq!(runtime.catalog_digest, catalog.digest());
@@ -359,9 +362,15 @@ fn independent_evidence_namespaces_survive_equal_evidence_ids() -> Result<(), Di
     );
     assert_eq!(found.record_ids, ["claim-a", "claim-b"]);
     assert_eq!(found.evidence_refs.len(), 2);
-    assert_eq!(found.evidence_refs[0].source_id, "separate-independent-source");
+    assert_eq!(
+        found.evidence_refs[0].source_id,
+        "separate-independent-source"
+    );
     assert_eq!(found.evidence_refs[1].source_id, "vendor-documentation");
-    assert_eq!(found.evidence_refs[0].evidence_id, found.evidence_refs[1].evidence_id);
+    assert_eq!(
+        found.evidence_refs[0].evidence_id,
+        found.evidence_refs[1].evidence_id
+    );
     assert_ne!(
         found.evidence_refs[0].source_revision,
         found.evidence_refs[1].source_revision
