@@ -3,12 +3,9 @@
 //! This defines *desired* algorithm/profile constraints, not validated
 //! provider capability, protocol negotiation, compliance or authorization.
 
-
 use sha2::{Digest, Sha256};
 
-use crate::standards::{
-    AlgorithmRole, KnownAlgorithm, SecurityCategory, StandardEdition,
-};
+use crate::standards::{AlgorithmRole, KnownAlgorithm, SecurityCategory, StandardEdition};
 use crate::{Diagnostic, DiagnosticCode, Limits, ResourceKind, SnapshotDigest};
 
 /// Exact supported target-profile contract generation.
