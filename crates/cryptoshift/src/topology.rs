@@ -93,6 +93,24 @@ impl DependencyAnalysis {
         limits.validate()?;
         limits.check(ResourceKind::GraphNodes, graph.nodes().len())?;
         limits.check(ResourceKind::GraphEdges, graph.edges().len())?;
+        // A validated graph can have been admitted under *looser* limits.
+        // Recheck the aggregate attached evidence references before copying
+        // any evidence into analysis-owned indexes or outputs.
+        let mut evidence_references = 0_usize;
+        for node in graph.nodes() {
+            evidence_references = limits.checked_add(
+                ResourceKind::GraphEdges,
+                evidence_references,
+                node.evidence_ids.len(),
+            )?;
+        }
+        for edge in graph.edges() {
+            evidence_references = limits.checked_add(
+                ResourceKind::GraphEdges,
+                evidence_references,
+                edge.evidence_ids.len(),
+            )?;
+        }
 
         // The source graph is validated and canonically sorted by FOSS-420.
         let systems: Vec<&str> = graph
@@ -411,6 +429,11 @@ impl DependencyTopology {
         limits.validate()?;
         limits.check(ResourceKind::GraphNodes, self.units.len())?;
         limits.check(ResourceKind::GraphEdges, self.prerequisites.len())?;
+        limits.checked_add(
+            ResourceKind::PlannerCandidates,
+            self.units.len(),
+            self.prerequisites.len(),
+        )?;
         let index: BTreeMap<&str, usize> = self
             .units
             .iter()
