@@ -106,10 +106,11 @@ FOSS-442.
 - Reject duplicate quantum profiles and contextual factors, incorrect unit
   references, source IDs containing control bytes, unknown observations and
   unauthorized overrides of derived factors.
-- Bound supplied profiles/claims, cumulative graph evidence references,
-  ten-factor-per-unit work, diagnostics and emitted ID/reference bytes with
-  existing Limits and checked arithmetic. On failure return one typed
-  redacted Diagnostic and **no partial report**.
+- Bound supplied profiles/claims, **aggregate external source-reference bytes
+  before indexing**, cumulative graph evidence references, ten-factor-per-unit
+  work, diagnostics and emitted ID/reference bytes with existing Limits and
+  checked arithmetic. On failure return one typed redacted Diagnostic and
+  **no partial report**.
 - No external endpoints, dynamic registry updates, environment clock,
   migration writes, unauthenticated policy overrides or secret key bytes.
 - Inferred/unknown basis and partial collection remain visible even where
@@ -129,6 +130,7 @@ FOSS-442.
 | Duplicate/missing/spoofed source references and derived override fail | invalid_sources_duplicates_and_derived_factor_overrides_rejected |
 | Cross-snapshot mixing denied | mismatched_source_digests_fail_closed |
 | Unsupported score version, weights and resource exhaustion denied | invalid_profiles_and_tight_resource_budgets_fail_closed |
+| Excessive external claim-reference bytes rejected before indexing | external_source_text_is_bounded_before_building_assessment_indexes |
 
 Run from repository root:
 
