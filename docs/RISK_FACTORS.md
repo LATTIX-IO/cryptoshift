@@ -6,8 +6,14 @@ security certification, cryptographic standards registry or risk policy.
 ## Purpose and precise boundary
 
 FOSS-427 consumes the immutable, canonical inventory (FOSS-418), typed
-evidence graph (FOSS-420), and SCC topology (FOSS-422) in **one common
-snapshot-digest trust boundary**. RiskAnalysis::analyze rejects any mismatch.
+evidence graph (FOSS-420), and SCC topology (FOSS-422). The **inventory digest**
+must match across all three, and the SCC topology must additionally carry
+the SHA-256 fingerprint of the **exact typed graph** used for its construction.
+RiskAnalysis::analyze rejects either mismatch, including two different graphs
+constructed from the same inventory. The canonical graph fingerprint covers
+node/edge type tags, use-site/observation bindings, identities, all source
+evidence references, and the original inventory digest. It is a content
+identity, not a signature.
 The result retains every raw dimension, uncertainty, source reference, typed
 finding and any explicitly supplied scoring profile. It does not gather
 cryptographic inventory, call a provider, consult a registry, sign a source,
@@ -103,19 +109,22 @@ FOSS-442.
 
 ## Determinism and security properties
 
-- Reject graph/inventory/topology mismatch using exact canonical SHA-256
-  snapshot digest. Content digest is integrity identity, not proof of source.
+- Reject cross-snapshot joins using the canonical SHA-256 inventory digest,
+  and reject cross-graph joins with the separately bound canonical graph
+  fingerprint. Neither digest authenticates a collector or external review.
 - Deduplicate and sort provenance IDs, observations and factor sources without
   conflating independent collectors.
 - Reject duplicate quantum profiles and contextual factors, incorrect unit
   references, stale claim digests, changed observation algorithm identities,
   source IDs containing control bytes, unknown observations and unauthorized
   overrides of derived factors.
-- Bound supplied profiles/claims, **aggregate external source-reference bytes
-  before indexing**, cumulative graph evidence references, ten-factor-per-unit
-  work, diagnostics and emitted ID/reference bytes with existing Limits and
-  checked arithmetic. On failure return one typed redacted Diagnostic and
-  **no partial report**.
+- Bound supplied profiles/claims, aggregate external source-reference
+  bytes before indexing, cumulative graph evidence references and
+  **per-system endpoint evidence-index entries**, ten-factor-per-unit work,
+  diagnostics and emitted ID/reference bytes with existing Limits and checked
+  arithmetic. A System -> System dependency reference counts at *both*
+  endpoints before any BTreeSet construction. On failure return one typed
+  redacted Diagnostic and **no partial report**.
 - No external endpoints, dynamic registry updates, environment clock,
   migration writes, unauthenticated policy overrides or secret key bytes.
 - Inferred/unknown basis and partial collection remain visible even where
@@ -134,6 +143,8 @@ FOSS-442.
 | Missing second quantum profile cannot be masked by one Severe claim | missing_second_profile_cannot_be_masked_by_a_known_severe_use |
 | Duplicate/missing/derived-overridden claims, stale source digests and wrong algorithms fail | invalid_sources_duplicates_and_derived_factor_overrides_rejected |
 | Cross-snapshot mixing denied | mismatched_source_digests_fail_closed |
+| Same-inventory graph/topology substitution denied; canonical graph identity invariant to node insertion order | topology_must_match_exact_graph_not_only_inventory_digest |
+| System-to-system evidence indexing must charge both endpoints before allocation | both_endpoints_of_dependency_edge_must_charge_evidence_index_budget |
 | Unsupported score version, weights and resource exhaustion denied | invalid_profiles_and_tight_resource_budgets_fail_closed |
 | Excessive external claim-reference bytes rejected before indexing | external_source_text_is_bounded_before_building_assessment_indexes |
 
