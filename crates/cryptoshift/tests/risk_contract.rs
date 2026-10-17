@@ -471,8 +471,29 @@ fn invalid_sources_duplicates_and_derived_factor_overrides_rejected() -> Result<
     let mut wrong_unit = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     wrong_unit[0].unit_id = "other-tenant-unit".into();
     assert_eq!(
-        check(vec![p], wrong_unit),
+        check(vec![p.clone()], wrong_unit),
         Some(DiagnosticCode::InvalidReference)
+    );
+
+    // Old classification data cannot silently follow an observation ID
+    // when its source inventory or algorithm identity has changed.
+    let mut stale_profile = p.clone();
+    stale_profile.source_digest = SnapshotDigest::from_bytes([0x11; 32]);
+    assert_eq!(
+        check(vec![stale_profile], vec![]),
+        Some(DiagnosticCode::IntegrityMismatch)
+    );
+    let mut wrong_algorithm = p.clone();
+    wrong_algorithm.algorithm_id = "ML-KEM-1024".into();
+    assert_eq!(
+        check(vec![wrong_algorithm], vec![]),
+        Some(DiagnosticCode::IntegrityMismatch)
+    );
+    let mut stale_context = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
+    stale_context[0].source_digest = SnapshotDigest::from_bytes([0x22; 32]);
+    assert_eq!(
+        check(vec![p], stale_context),
+        Some(DiagnosticCode::IntegrityMismatch)
     );
     Ok(())
 }
