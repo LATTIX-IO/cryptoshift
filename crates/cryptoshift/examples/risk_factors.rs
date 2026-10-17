@@ -2,11 +2,11 @@
 
 use cryptoshift::{
     ClaimOrigin, CollectionCompleteness, CollectionRun, ConflictState, ContextAssessment,
-    CryptoObservation, CryptoUseKind, DependencyAnalysis, Diagnostic, EvidenceBasis,
-    EvidenceGraph, EvidenceRecord, GraphEdge, GraphNode, GraphNodeKind, GraphRelation,
-    IDENTITY_VERSION, InventorySnapshot, Limits, NORMALIZATION_VERSION,
-    QuantumAssessment, QuantumPosture, RiskAnalysis, RiskFactorKind, RiskLevel,
-    SCORE_PROFILE_VERSION, ScoreProfile, ValidatedInventorySnapshot,
+    CryptoObservation, CryptoUseKind, DependencyAnalysis, Diagnostic, EvidenceBasis, EvidenceGraph,
+    EvidenceRecord, GraphEdge, GraphNode, GraphNodeKind, GraphRelation, IDENTITY_VERSION,
+    InventorySnapshot, Limits, NORMALIZATION_VERSION, QuantumAssessment, QuantumPosture,
+    RiskAnalysis, RiskFactorKind, RiskLevel, SCORE_PROFILE_VERSION, ScoreProfile,
+    ValidatedInventorySnapshot,
 };
 
 fn main() -> Result<(), Diagnostic> {
@@ -116,7 +116,10 @@ fn main() -> Result<(), Diagnostic> {
                 factor.uncertainty,
             );
         }
-        println!("optional pressure: {:?}", unit.score.as_ref().map(|s| s.pressure_bps));
+        println!(
+            "optional pressure: {:?}",
+            unit.score.as_ref().map(|s| s.pressure_bps)
+        );
         println!("findings: {}", unit.findings.len());
     }
     println!("Synthetic, attributed assessments only; no policy or migration approval.");

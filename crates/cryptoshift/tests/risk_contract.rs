@@ -1,13 +1,12 @@
 //! Public consumer contract tests for risk factors and optional scoring.
 
 use cryptoshift::{
-    ClaimOrigin, CollectionCompleteness, CollectionRun, ConflictState,
-    ContextAssessment, CryptoObservation, CryptoUseKind, DependencyAnalysis,
-    DependencyTopology, Diagnostic, DiagnosticCode, EvidenceBasis, EvidenceGraph,
-    EvidenceRecord, GraphEdge, GraphNode, GraphNodeKind, GraphRelation,
-    IDENTITY_VERSION, InventorySnapshot, Limits, NORMALIZATION_VERSION,
-    QuantumAssessment, QuantumPosture, RiskAnalysis, RiskFactor, RiskFactorKind,
-    RiskFindingCode, RiskLevel, RiskReport, RiskUncertainty, SCORE_PROFILE_VERSION,
+    ClaimOrigin, CollectionCompleteness, CollectionRun, ConflictState, ContextAssessment,
+    CryptoObservation, CryptoUseKind, DependencyAnalysis, DependencyTopology, Diagnostic,
+    DiagnosticCode, EvidenceBasis, EvidenceGraph, EvidenceRecord, GraphEdge, GraphNode,
+    GraphNodeKind, GraphRelation, IDENTITY_VERSION, InventorySnapshot, Limits,
+    NORMALIZATION_VERSION, QuantumAssessment, QuantumPosture, RiskAnalysis, RiskFactor,
+    RiskFactorKind, RiskFindingCode, RiskLevel, RiskReport, RiskUncertainty, SCORE_PROFILE_VERSION,
     ScoreProfile, ValidatedInventorySnapshot,
 };
 
@@ -16,7 +15,14 @@ fn fixture(
     use_kind: CryptoUseKind,
     conflict: ConflictState,
     basis: EvidenceBasis,
-) -> Result<(ValidatedInventorySnapshot, EvidenceGraph, DependencyTopology), Diagnostic> {
+) -> Result<
+    (
+        ValidatedInventorySnapshot,
+        EvidenceGraph,
+        DependencyTopology,
+    ),
+    Diagnostic,
+> {
     let limits = Limits::default();
     let inventory = ValidatedInventorySnapshot::new(
         InventorySnapshot {
@@ -113,20 +119,18 @@ fn score_profile() -> Result<ScoreProfile, Diagnostic> {
 }
 
 fn assess(
-    input: &(ValidatedInventorySnapshot, EvidenceGraph, DependencyTopology),
+    input: &(
+        ValidatedInventorySnapshot,
+        EvidenceGraph,
+        DependencyTopology,
+    ),
     profiles: &[QuantumAssessment],
     context: &[ContextAssessment],
     scoring: Option<&ScoreProfile>,
     limits: &Limits,
 ) -> Result<RiskReport, Diagnostic> {
     RiskAnalysis::analyze(
-        &input.0,
-        &input.1,
-        &input.2,
-        profiles,
-        context,
-        scoring,
-        limits,
+        &input.0, &input.1, &input.2, profiles, context, scoring, limits,
     )
 }
 
@@ -151,10 +155,7 @@ fn absent_context_and_unclassified_algorithm_stay_unknown() -> Result<(), Diagno
         factor(&result, RiskFactorKind::QuantumExposure).uncertainty,
         Some(RiskUncertainty::MissingAssessment)
     );
-    assert_eq!(
-        factor(&result, RiskFactorKind::QuantumExposure).level,
-        None
-    );
+    assert_eq!(factor(&result, RiskFactorKind::QuantumExposure).level, None);
     assert_eq!(
         factor(&result, RiskFactorKind::EvidenceQuality).level,
         Some(RiskLevel::Low)
@@ -193,11 +194,20 @@ fn fully_attributed_inputs_yield_inspectable_versioned_score() -> Result<(), Dia
     )];
     let mut context = complete_context(ClaimOrigin::AnalystAssessment);
     let profile = score_profile()?;
-    let baseline = assess(&data, &quantum, &context, Some(&profile), &Limits::default())?;
+    let baseline = assess(
+        &data,
+        &quantum,
+        &context,
+        Some(&profile),
+        &Limits::default(),
+    )?;
     let unit = &baseline.units[0];
     assert_eq!(unit.score.as_ref().map(|s| s.pressure_bps), Some(3333));
     assert_eq!(baseline.score_profile, Some(profile.clone()));
-    assert_eq!(factor(&baseline, RiskFactorKind::QuantumExposure).level, Some(RiskLevel::Severe));
+    assert_eq!(
+        factor(&baseline, RiskFactorKind::QuantumExposure).level,
+        Some(RiskLevel::Severe)
+    );
     assert_eq!(
         factor(&baseline, RiskFactorKind::QuantumExposure).inventory_evidence_ids,
         ["ev-1"]
@@ -206,17 +216,36 @@ fn fully_attributed_inputs_yield_inspectable_versioned_score() -> Result<(), Dia
         factor(&baseline, RiskFactorKind::QuantumExposure).assessment_references,
         ["quantum-assessment-r1"]
     );
-    assert!(unit.findings.iter().any(|finding| {
-        finding.code == RiskFindingCode::SusceptibleUse
-    }));
+    assert!(
+        unit.findings
+            .iter()
+            .any(|finding| { finding.code == RiskFindingCode::SusceptibleUse })
+    );
     context.reverse();
-    let reordered = assess(&data, &quantum, &context, Some(&profile), &Limits::default())?;
+    let reordered = assess(
+        &data,
+        &quantum,
+        &context,
+        Some(&profile),
+        &Limits::default(),
+    )?;
     assert_eq!(baseline, reordered);
-    let changed = ScoreProfile::new("v1-weighted".into(), 1, [
-        1900, 900, 900, 900, 900, 900, 900, 900, 900, 900,
-    ])?;
-    let weighted = assess(&data, &quantum, &context, Some(&changed), &Limits::default())?;
-    assert_eq!(weighted.units[0].score.as_ref().map(|s| s.pressure_bps), Some(4000));
+    let changed = ScoreProfile::new(
+        "v1-weighted".into(),
+        1,
+        [1900, 900, 900, 900, 900, 900, 900, 900, 900, 900],
+    )?;
+    let weighted = assess(
+        &data,
+        &quantum,
+        &context,
+        Some(&changed),
+        &Limits::default(),
+    )?;
+    assert_eq!(
+        weighted.units[0].score.as_ref().map(|s| s.pressure_bps),
+        Some(4000)
+    );
     assert_eq!(weighted.units[0].factors, unit.factors);
     assert_eq!(weighted.units[0].findings, unit.findings);
     Ok(())
@@ -224,23 +253,40 @@ fn fully_attributed_inputs_yield_inspectable_versioned_score() -> Result<(), Dia
 
 #[test]
 fn configured_or_library_capability_never_becomes_active_use() -> Result<(), Diagnostic> {
-    for kind in [CryptoUseKind::LibraryCapability, CryptoUseKind::ConfiguredProtocol] {
-        let data = fixture(false, kind, ConflictState::Uncontested, EvidenceBasis::Direct)?;
+    for kind in [
+        CryptoUseKind::LibraryCapability,
+        CryptoUseKind::ConfiguredProtocol,
+    ] {
+        let data = fixture(
+            false,
+            kind,
+            ConflictState::Uncontested,
+            EvidenceBasis::Direct,
+        )?;
         let profiles = [classification(
             ClaimOrigin::AnalystAssessment,
             QuantumPosture::Susceptible,
         )];
         let context = complete_context(ClaimOrigin::AnalystAssessment);
-        let report = assess(&data, &profiles, &context, Some(&score_profile()?), &Limits::default())?;
+        let report = assess(
+            &data,
+            &profiles,
+            &context,
+            Some(&score_profile()?),
+            &Limits::default(),
+        )?;
         assert_eq!(factor(&report, RiskFactorKind::QuantumExposure).level, None);
         assert_eq!(
             factor(&report, RiskFactorKind::QuantumExposure).uncertainty,
             Some(RiskUncertainty::UnconfirmedUse)
         );
         assert!(report.units[0].score.is_none());
-        assert!(!report.units[0].findings.iter().any(|finding| {
-            finding.code == RiskFindingCode::SusceptibleUse
-        }));
+        assert!(
+            !report.units[0]
+                .findings
+                .iter()
+                .any(|finding| { finding.code == RiskFindingCode::SusceptibleUse })
+        );
     }
     Ok(())
 }
@@ -258,13 +304,26 @@ fn uncertainty_survives_known_severe_exposure() -> Result<(), Diagnostic> {
         QuantumPosture::Susceptible,
     )];
     let context = complete_context(ClaimOrigin::AnalystAssessment);
-    let report = assess(&data, &profile, &context, Some(&score_profile()?), &Limits::default())?;
+    let report = assess(
+        &data,
+        &profile,
+        &context,
+        Some(&score_profile()?),
+        &Limits::default(),
+    )?;
     let exposed = factor(&report, RiskFactorKind::QuantumExposure);
     assert_eq!(exposed.level, Some(RiskLevel::Severe));
     assert!(exposed.uncertainty.is_some());
     assert_eq!(report.units[0].score, None);
-    assert_eq!(factor(&report, RiskFactorKind::EvidenceQuality).level, Some(RiskLevel::High));
-    assert!(factor(&report, RiskFactorKind::EvidenceQuality).uncertainty.is_some());
+    assert_eq!(
+        factor(&report, RiskFactorKind::EvidenceQuality).level,
+        Some(RiskLevel::High)
+    );
+    assert!(
+        factor(&report, RiskFactorKind::EvidenceQuality)
+            .uncertainty
+            .is_some()
+    );
     Ok(())
 }
 
@@ -281,13 +340,23 @@ fn incomplete_collection_and_scenario_assumptions_never_score() -> Result<(), Di
         ClaimOrigin::ScenarioAssumption,
         QuantumPosture::CandidateResistant,
     )];
-    let report = assess(&data, &profile, &context, Some(&score_profile()?), &Limits::default())?;
+    let report = assess(
+        &data,
+        &profile,
+        &context,
+        Some(&score_profile()?),
+        &Limits::default(),
+    )?;
     assert_eq!(report.units[0].score, None);
     assert_eq!(
         factor(&report, RiskFactorKind::QuantumExposure).level,
         Some(RiskLevel::Moderate)
     );
-    assert!(factor(&report, RiskFactorKind::QuantumExposure).uncertainty.is_some());
+    assert!(
+        factor(&report, RiskFactorKind::QuantumExposure)
+            .uncertainty
+            .is_some()
+    );
     assert_eq!(
         factor(&report, RiskFactorKind::EvidenceQuality).uncertainty,
         Some(RiskUncertainty::IncompleteCoverage)
@@ -296,15 +365,17 @@ fn incomplete_collection_and_scenario_assumptions_never_score() -> Result<(), Di
         factor(&report, RiskFactorKind::DependencyComplexity).uncertainty,
         Some(RiskUncertainty::IncompleteCoverage)
     );
-    assert!(report.units[0].findings.iter().any(|finding| {
-        finding.code == RiskFindingCode::ScenarioDependent
-    }));
+    assert!(
+        report.units[0]
+            .findings
+            .iter()
+            .any(|finding| { finding.code == RiskFindingCode::ScenarioDependent })
+    );
     Ok(())
 }
 
 #[test]
-fn missing_second_profile_cannot_be_masked_by_a_known_severe_use()
--> Result<(), Diagnostic> {
+fn missing_second_profile_cannot_be_masked_by_a_known_severe_use() -> Result<(), Diagnostic> {
     let (inventory, graph, _) = fixture(
         false,
         CryptoUseKind::ActiveUse,
@@ -339,7 +410,10 @@ fn missing_second_profile_cannot_be_masked_by_a_known_severe_use()
     let bound = EvidenceGraph::new(&snapshot, nodes, edges, &Limits::default())?;
     let topology = DependencyAnalysis::analyze(&bound, &Limits::default())?;
     let input = (snapshot, bound, topology);
-    let profile = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible)];
+    let profile = [classification(
+        ClaimOrigin::AnalystAssessment,
+        QuantumPosture::Susceptible,
+    )];
     let report = assess(
         &input,
         &profile,
@@ -349,14 +423,16 @@ fn missing_second_profile_cannot_be_masked_by_a_known_severe_use()
     )?;
     let exposure = factor(&report, RiskFactorKind::QuantumExposure);
     assert_eq!(exposure.level, Some(RiskLevel::Severe));
-    assert_eq!(exposure.uncertainty, Some(RiskUncertainty::MissingAssessment));
+    assert_eq!(
+        exposure.uncertainty,
+        Some(RiskUncertainty::MissingAssessment)
+    );
     assert!(report.units[0].score.is_none());
     Ok(())
 }
 
 #[test]
-fn invalid_sources_duplicates_and_derived_factor_overrides_rejected()
--> Result<(), Diagnostic> {
+fn invalid_sources_duplicates_and_derived_factor_overrides_rejected() -> Result<(), Diagnostic> {
     let data = fixture(
         false,
         CryptoUseKind::ActiveUse,
@@ -375,13 +451,22 @@ fn invalid_sources_duplicates_and_derived_factor_overrides_rejected()
     );
     let mut missing = p.clone();
     missing.observation_id = "unknown".into();
-    assert_eq!(check(vec![missing], vec![]), Some(DiagnosticCode::InvalidReference));
+    assert_eq!(
+        check(vec![missing], vec![]),
+        Some(DiagnosticCode::InvalidReference)
+    );
     let mut bad_ref = p.clone();
     bad_ref.source_reference = " \n ".into();
-    assert_eq!(check(vec![bad_ref], vec![]), Some(DiagnosticCode::InvalidIdentifier));
+    assert_eq!(
+        check(vec![bad_ref], vec![]),
+        Some(DiagnosticCode::InvalidIdentifier)
+    );
     let mut claims = complete_context(ClaimOrigin::AnalystAssessment);
     claims.push(claims[0].clone());
-    assert_eq!(check(vec![p.clone()], claims), Some(DiagnosticCode::DuplicateRecord));
+    assert_eq!(
+        check(vec![p.clone()], claims),
+        Some(DiagnosticCode::DuplicateRecord)
+    );
     let mut override_factor = complete_context(ClaimOrigin::AnalystAssessment);
     override_factor[0].factor = RiskFactorKind::QuantumExposure;
     assert_eq!(
@@ -390,7 +475,10 @@ fn invalid_sources_duplicates_and_derived_factor_overrides_rejected()
     );
     let mut wrong_unit = complete_context(ClaimOrigin::AnalystAssessment);
     wrong_unit[0].unit_id = "other-tenant-unit".into();
-    assert_eq!(check(vec![p], wrong_unit), Some(DiagnosticCode::InvalidReference));
+    assert_eq!(
+        check(vec![p], wrong_unit),
+        Some(DiagnosticCode::InvalidReference)
+    );
     Ok(())
 }
 
@@ -417,7 +505,10 @@ fn mismatched_source_digests_fail_closed() -> Result<(), Diagnostic> {
         None,
         &Limits::default(),
     );
-    assert_eq!(outcome.err().map(|e| e.code), Some(DiagnosticCode::IntegrityMismatch));
+    assert_eq!(
+        outcome.err().map(|e| e.code),
+        Some(DiagnosticCode::IntegrityMismatch)
+    );
     Ok(())
 }
 
@@ -425,17 +516,20 @@ fn mismatched_source_digests_fail_closed() -> Result<(), Diagnostic> {
 fn invalid_profiles_and_tight_resource_budgets_fail_closed() -> Result<(), Diagnostic> {
     assert_eq!(
         ScoreProfile::new("invalid".into(), 99, [1000; 10])
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::UnsupportedSchemaVersion)
     );
     assert_eq!(
         ScoreProfile::new("invalid".into(), 1, [0; 10])
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::InvalidLimit)
     );
     assert_eq!(
         ScoreProfile::new("invalid".into(), 1, [2000; 10])
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::InvalidLimit)
     );
     let data = fixture(
@@ -445,16 +539,40 @@ fn invalid_profiles_and_tight_resource_budgets_fail_closed() -> Result<(), Diagn
         EvidenceBasis::Direct,
     )?;
     let contexts = complete_context(ClaimOrigin::AnalystAssessment);
-    let profiles = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible)];
+    let profiles = [classification(
+        ClaimOrigin::AnalystAssessment,
+        QuantumPosture::Susceptible,
+    )];
     let cases = [
-        Limits { max_planner_candidates: 9, ..Limits::default() },
-        Limits { max_evidence_records: 7, ..Limits::default() },
-        Limits { max_diagnostics: 1, ..Limits::default() },
-        Limits { max_export_bytes: 1, ..Limits::default() },
-        Limits { max_graph_edges: 2, ..Limits::default() },
+        Limits {
+            max_planner_candidates: 9,
+            ..Limits::default()
+        },
+        Limits {
+            max_evidence_records: 7,
+            ..Limits::default()
+        },
+        Limits {
+            max_diagnostics: 1,
+            ..Limits::default()
+        },
+        Limits {
+            max_export_bytes: 1,
+            ..Limits::default()
+        },
+        Limits {
+            max_graph_edges: 2,
+            ..Limits::default()
+        },
     ];
     for limits in cases {
-        let result = assess(&data, &profiles, &contexts, Some(&score_profile()?), &limits);
+        let result = assess(
+            &data,
+            &profiles,
+            &contexts,
+            Some(&score_profile()?),
+            &limits,
+        );
         assert_eq!(
             result.err().map(|e| e.code),
             Some(DiagnosticCode::ResourceLimitExceeded)

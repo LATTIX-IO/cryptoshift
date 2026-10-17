@@ -221,11 +221,7 @@ pub struct ScoreProfile {
 
 impl ScoreProfile {
     /// Validate ten strictly positive weights adding to exactly 10,000 bps.
-    pub fn new(
-        id: String,
-        version: u16,
-        weights_bps: [u16; 10],
-    ) -> Result<Self, Diagnostic> {
+    pub fn new(id: String, version: u16, weights_bps: [u16; 10]) -> Result<Self, Diagnostic> {
         if version != SCORE_PROFILE_VERSION {
             return Err(Diagnostic::new(
                 DiagnosticCode::UnsupportedSchemaVersion,
@@ -233,11 +229,7 @@ impl ScoreProfile {
                 "score profile schema version is unsupported",
             ));
         }
-        if id.is_empty()
-            || id.len() > 256
-            || id.trim() != id
-            || id.chars().any(char::is_control)
-        {
+        if id.is_empty() || id.len() > 256 || id.trim() != id || id.chars().any(char::is_control) {
             return Err(Diagnostic::new(
                 DiagnosticCode::InvalidIdentifier,
                 "score_profile_id",

@@ -7,15 +7,14 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::risk_model::{
-    ClaimOrigin, ContextAssessment, QuantumAssessment, QuantumPosture, RiskFactor,
-    RiskFactorKind, RiskFinding, RiskFindingCode, RiskLevel, RiskReport, RiskScore,
-    RiskUncertainty, ScoreProfile, UnitRiskVector, RISK_FACTOR_VERSION,
+    ClaimOrigin, ContextAssessment, QuantumAssessment, QuantumPosture, RISK_FACTOR_VERSION,
+    RiskFactor, RiskFactorKind, RiskFinding, RiskFindingCode, RiskLevel, RiskReport, RiskScore,
+    RiskUncertainty, ScoreProfile, UnitRiskVector,
 };
 use crate::{
-    CollectionCompleteness, ConflictState, CryptoObservation, CryptoUseKind,
-    DependencyTopology, Diagnostic, DiagnosticCode, EvidenceBasis, EvidenceGraph,
-    EvidenceRecord, GraphNode, GraphNodeKind, GraphRelation, Limits, ResourceKind,
-    ValidatedInventorySnapshot,
+    CollectionCompleteness, ConflictState, CryptoObservation, CryptoUseKind, DependencyTopology,
+    Diagnostic, DiagnosticCode, EvidenceBasis, EvidenceGraph, EvidenceRecord, GraphNode,
+    GraphNodeKind, GraphRelation, Limits, ResourceKind, ValidatedInventorySnapshot,
 };
 
 /// Offline, stateless analysis of evidence and explicitly attributed claims.
@@ -59,18 +58,12 @@ impl RiskAnalysis {
         // looser limits. Do so before building indexes or duplicating refs.
         let mut attached = 0_usize;
         for node in graph.nodes() {
-            attached = limits.checked_add(
-                ResourceKind::GraphEdges,
-                attached,
-                node.evidence_ids.len(),
-            )?;
+            attached =
+                limits.checked_add(ResourceKind::GraphEdges, attached, node.evidence_ids.len())?;
         }
         for edge in graph.edges() {
-            attached = limits.checked_add(
-                ResourceKind::GraphEdges,
-                attached,
-                edge.evidence_ids.len(),
-            )?;
+            attached =
+                limits.checked_add(ResourceKind::GraphEdges, attached, edge.evidence_ids.len())?;
         }
 
         let snap = inventory.snapshot();
@@ -79,11 +72,8 @@ impl RiskAnalysis {
             .iter()
             .map(|o| (o.id.as_str(), o))
             .collect();
-        let evidence: BTreeMap<&str, &EvidenceRecord> = snap
-            .evidence
-            .iter()
-            .map(|e| (e.id.as_str(), e))
-            .collect();
+        let evidence: BTreeMap<&str, &EvidenceRecord> =
+            snap.evidence.iter().map(|e| (e.id.as_str(), e)).collect();
         let nodes: BTreeMap<&str, &GraphNode> = graph
             .nodes()
             .iter()
@@ -106,7 +96,10 @@ impl RiskAnalysis {
                     "quantum classification must name an inventory observation",
                 ));
             }
-            if profiles.insert(profile.observation_id.as_str(), profile).is_some() {
+            if profiles
+                .insert(profile.observation_id.as_str(), profile)
+                .is_some()
+            {
                 return Err(problem(
                     DiagnosticCode::DuplicateRecord,
                     "quantum_observation",
@@ -261,11 +254,8 @@ impl RiskAnalysis {
                     });
                 }
             }
-            diagnostic_count = limits.checked_add(
-                ResourceKind::Diagnostics,
-                diagnostic_count,
-                findings.len(),
-            )?;
+            diagnostic_count =
+                limits.checked_add(ResourceKind::Diagnostics, diagnostic_count, findings.len())?;
 
             charge(limits, &mut output_bytes, &unit.id)?;
             for factor in &factors {
@@ -352,7 +342,10 @@ fn quantum_factor(
                     uncertain(&mut factor, RiskUncertainty::ConflictingEvidence);
                 }
                 for ev in &observation.evidence_ids {
-                    if evidence.get(ev.as_str()).is_some_and(|e| e.basis != EvidenceBasis::Direct) {
+                    if evidence
+                        .get(ev.as_str())
+                        .is_some_and(|e| e.basis != EvidenceBasis::Direct)
+                    {
                         uncertain(&mut factor, RiskUncertainty::WeakEvidence);
                     }
                 }
@@ -522,11 +515,7 @@ fn uncertain(factor: &mut RiskFactor, cause: RiskUncertainty) {
 }
 
 fn valid_ref(id: &str, field: &'static str) -> Result<(), Diagnostic> {
-    if id.is_empty()
-        || id.len() > 256
-        || id.trim() != id
-        || id.chars().any(char::is_control)
-    {
+    if id.is_empty() || id.len() > 256 || id.trim() != id || id.chars().any(char::is_control) {
         return Err(problem(
             DiagnosticCode::InvalidIdentifier,
             field,
