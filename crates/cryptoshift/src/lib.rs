@@ -1,10 +1,9 @@
 //! Deterministic cryptographic-migration planning contracts.
 //!
-//! This early, unpublished increment only defines *trust-boundary preflight*:
-//! bounded resource admission, exact outer schema versions, and safe diagnostics.
-//! It does **not** parse external formats, validate crypto inventory semantics,
-//! implement policy evaluation, or generate migration plans. Format adapters in
-//! later increments must validate payload structure and provenance themselves.
+//! This early, unpublished library includes trust-boundary preflight plus a
+//! validated, canonical binary inventory snapshot contract. Its snapshots retain
+//! evidence and collection incompleteness; they are not authenticated observations.
+//! This crate does not yet evaluate policies or generate migration plans.
 //!
 //! # Example
 //!
@@ -28,10 +27,48 @@
 
 mod diagnostic;
 mod envelope;
+mod graph;
+mod inventory;
+mod inventory_codec;
 mod limits;
+mod risk_analysis;
+mod risk_model;
+mod standards;
+mod target;
+mod topology;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
 pub use envelope::{
     CriticalProfileReference, PreflightedEnvelope, SchemaKind, SchemaVersion, VersionedEnvelope,
 };
 pub use limits::{Limits, ParseBudget, ResourceKind};
+
+pub use inventory::{
+    AbsenceRecord, AbsenceStatus, CollectionCompleteness, CollectionRun, ConflictState,
+    CryptoObservation, CryptoUseKind, EvidenceBasis, EvidenceRecord, IDENTITY_VERSION,
+    InventoryArtifact, InventorySnapshot, NORMALIZATION_VERSION, SnapshotDigest,
+    ValidatedInventorySnapshot,
+};
+
+pub use graph::{EvidenceGraph, GraphEdge, GraphNode, GraphNodeKind, GraphRelation};
+
+pub use topology::{
+    DependencyAnalysis, DependencyTopology, DirectFanout, DirectOutgoingFanout, MigrationUnit,
+    PrerequisiteArc,
+};
+
+pub use risk_analysis::RiskAnalysis;
+pub use risk_model::{
+    ClaimOrigin, ContextAssessment, QuantumAssessment, QuantumPosture, RISK_FACTOR_VERSION,
+    RiskFactor, RiskFactorKind, RiskFinding, RiskFindingCode, RiskLevel, RiskReport, RiskScore,
+    RiskUncertainty, SCORE_PROFILE_VERSION, ScoreProfile, UnitRiskVector,
+};
+
+pub use standards::{
+    AlgorithmRole, KnownAlgorithm, STANDARDS_CATALOG_VERSION, SecurityCategory, StandardEdition,
+};
+pub use target::{
+    AlgorithmConstraint, CertificateConstraint, Cnsa20Overlay, ConstraintDisposition,
+    ExplicitDeadline, HybridConstruction, ProfileProvenance, ProtocolConstraint,
+    TARGET_PROFILE_VERSION, TargetDisposition, TargetProfile, TargetProfileDraft,
+};
