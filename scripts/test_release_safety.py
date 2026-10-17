@@ -171,10 +171,38 @@ class ReleaseSafetyTests(unittest.TestCase):
     def test_audit_cache_action_must_remain_pinned(self):
         """The audit job cannot use a floating action revision."""
         ci = (self.root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-        needle = "uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3"
+        needle = "uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
         self.assertEqual(ci.count(needle), 2)
         self.put(".github/workflows/ci.yml", ci.replace(needle, "uses: Swatinem/rust-cache@v2"))
         self.reject("Audit tool cache must use the pinned trusted action")
+
+    def test_old_cache_action_pin_rejected(self):
+        """Previously reviewed SHA is not automatically trusted after bump."""
+        self.mutate(".github/workflows/ci.yml", "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6", "Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3")
+        self.reject("Audit tool cache must use the pinned trusted action")
+
+    def test_upstream_master_is_not_the_verified_release(self):
+        """Reject the bot's untagged moving-master SHA."""
+        self.mutate(".github/workflows/ci.yml", "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6", "Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16")
+        self.reject("Audit tool cache must use the pinned trusted action")
+
+    def test_rust_build_cache_must_match_audit_cache_pin(self):
+        """An independently swapped build-cache action is not trusted."""
+        path = ".github/workflows/ci.yml"
+        ci = (self.root / path).read_text(encoding="utf-8")
+        sha = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
+        self.assertEqual(ci.count(sha), 2)
+        self.put(path, ci.replace(sha, "Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3", 1))
+        self.reject("Rust build cache must use the pinned trusted action")
+
+    def test_rust_build_cache_write_is_main_only(self):
+        """PR cache writing cannot be unlocked while audit cache stays fenced."""
+        path = ".github/workflows/ci.yml"
+        ci = (self.root / path).read_text(encoding="utf-8")
+        expected = "save-if: $" + "{{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}"
+        self.assertEqual(ci.count(expected), 2)
+        self.put(path, ci.replace(expected, "save-if: true", 1))
+        self.reject("Rust build cache must only be writable")
 
     def test_cache_policy_not_satisfied_by_unrelated_step(self):
         """Only inputs of the pinned cache action can authorize cache writes."""
