@@ -54,6 +54,34 @@ impl RiskAnalysis {
         )?;
         limits.checked_add(ResourceKind::EvidenceRecords, quantum.len(), context.len())?;
 
+        // Meter source-attributed structured inputs before indexing them.
+        // Caller-owned arrays may have been materialized under looser limits.
+        let mut supplied_bytes = 0_usize;
+        for profile in quantum {
+            supplied_bytes = limits.checked_add(
+                ResourceKind::InputBytes,
+                supplied_bytes,
+                profile.observation_id.len(),
+            )?;
+            supplied_bytes = limits.checked_add(
+                ResourceKind::InputBytes,
+                supplied_bytes,
+                profile.source_reference.len(),
+            )?;
+        }
+        for claim in context {
+            supplied_bytes = limits.checked_add(
+                ResourceKind::InputBytes,
+                supplied_bytes,
+                claim.unit_id.len(),
+            )?;
+            supplied_bytes = limits.checked_add(
+                ResourceKind::InputBytes,
+                supplied_bytes,
+                claim.source_reference.len(),
+            )?;
+        }
+
         // Re-admit under caller limits, even if graph was constructed under
         // looser limits. Do so before building indexes or duplicating refs.
         let mut attached = 0_usize;
