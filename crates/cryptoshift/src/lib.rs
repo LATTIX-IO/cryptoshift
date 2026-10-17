@@ -27,9 +27,9 @@
 
 mod diagnostic;
 mod envelope;
+mod graph;
 mod inventory;
 mod inventory_codec;
-mod graph;
 mod limits;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
