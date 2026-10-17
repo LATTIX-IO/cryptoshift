@@ -146,8 +146,12 @@ pub enum QuantumPosture {
 /// Explicit quantum classification tied to a validated inventory observation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct QuantumAssessment {
+    /// Exact source inventory digest for which this assertion was prepared.
+    pub source_digest: SnapshotDigest,
     /// Stable observation ID present in validated inventory.
     pub observation_id: String,
+    /// Exact algorithm identity, which must match the named observation.
+    pub algorithm_id: String,
     /// Assessed posture; no algorithm-name parsing or silent normalization.
     pub posture: QuantumPosture,
     /// External assessment versus scenario assumption.
@@ -159,6 +163,8 @@ pub struct QuantumAssessment {
 /// Supplied context for one migration unit and one nondeducible factor.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContextAssessment {
+    /// Exact inventory digest on which this unit-level assessment is based.
+    pub source_digest: SnapshotDigest,
     /// Exact SCC migration-unit ID in supplied topology.
     pub unit_id: String,
     /// Factor not derivable solely from inventory or graph structure.
