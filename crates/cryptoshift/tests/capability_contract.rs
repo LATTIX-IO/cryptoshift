@@ -170,6 +170,19 @@ fn canonical_identity_is_order_independent_and_provenance_sensitive() -> Result<
 }
 
 #[test]
+fn frozen_v1_binary_fixture_is_stable_across_revisions() -> Result<(), Diagnostic> {
+    // Independently constructed v1 reference fixture. Any modification to
+    // framing or content identity requires explicit schema-version review.
+    let catalog = build(vec![vendor("fact-one", CapabilityState::Available)])?;
+    assert_eq!(catalog.export(&Limits::default())?.len(), 300);
+    assert_eq!(
+        catalog.digest().as_identifier(),
+        "sha256:e141eeb7fc3190e8de82f8402ebcf559977ab9e5426874974b5fa9b6c598eba4"
+    );
+    Ok(())
+}
+
+#[test]
 fn advertised_capability_is_neither_deployed_nor_negotiated() -> Result<(), Diagnostic> {
     let target = target("tenant-alpha", ConstraintDisposition::Required)?;
     let catalog = build(vec![

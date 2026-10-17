@@ -104,6 +104,10 @@ Forbidden target still reports facts **without permitting use**.
   revisions, status and evidence types. SHA-256 binds **all** those fields.
   Reversing input record order is byte-identical; changes in provider/version,
   source revision, status or proof digest rotate the hash.
+- A frozen, independent v1 fixture for a single vendor Available claim
+  serializes to **300 bytes**, SHA-256
+  `e141eeb7fc3190e8de82f8402ebcf559977ab9e5426874974b5fa9b6c598eba4`.
+  Changes to framing require explicit schema-version review.
 - Export is not a wire deserializer. External adapters must parse untrusted
   bytes against a versioned schema and independently verify issuer/source
   authenticity and trusted expected digest before passing a draft.
@@ -124,6 +128,7 @@ Forbidden target still reports facts **without permitting use**.
 | Acceptance requirement | Consumer regression |
 | --- | --- |
 | Canonical hash/bytes independent of insertion order; changes are visible | canonical_identity_is_order_independent_and_provenance_sensitive |
+| Immutable v1 binary golden fixture prevents silent codec changes | frozen_v1_binary_fixture_is_stable_across_revisions |
 | Advertised product != exact deployed runtime; verified claim retains evidence | advertised_capability_is_neither_deployed_nor_negotiated |
 | Exact provider/version/platform/scope/role match without fallback | incompatible_version_platform_provider_scope_and_role_never_inherit_claims |
 | Roadmap, Preview, Unsupported, Unknown, NoEvidence and Forbidden separate | roadmap_preview_unsupported_unknown_and_missing_are_distinct |
