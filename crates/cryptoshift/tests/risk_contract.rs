@@ -618,3 +618,89 @@ fn external_source_text_is_bounded_before_building_assessment_indexes() -> Resul
     Ok(())
 }
 
+#[test]
+fn topology_must_match_exact_graph_not_only_inventory_digest() -> Result<(), Diagnostic> {
+    let data = fixture(
+        false,
+        CryptoUseKind::ActiveUse,
+        ConflictState::Uncontested,
+        EvidenceBasis::Direct,
+    )?;
+    let alternate = EvidenceGraph::new(
+        &data.0,
+        data.1.nodes().to_vec(),
+        vec![],
+        &Limits::default(),
+    )?;
+    let alternate_topology = DependencyAnalysis::analyze(&alternate, &Limits::default())?;
+    assert_eq!(data.1.source_digest(), alternate.source_digest());
+    assert_ne!(data.1.fingerprint(), alternate.fingerprint());
+    assert_eq!(data.2.graph_fingerprint(), data.1.fingerprint());
+    assert_eq!(
+        RiskAnalysis::analyze(
+            &data.0,
+            &data.1,
+            &alternate_topology,
+            &[],
+            &[],
+            None,
+            &Limits::default(),
+        )
+        .err().map(|e| e.code),
+        Some(DiagnosticCode::IntegrityMismatch)
+    );
+
+    let mut reversed_nodes = data.1.nodes().to_vec();
+    reversed_nodes.reverse();
+    let canonical_again = EvidenceGraph::new(
+        &data.0,
+        reversed_nodes,
+        data.1.edges().to_vec(),
+        &Limits::default(),
+    )?;
+    assert_eq!(data.1.fingerprint(), canonical_again.fingerprint());
+    Ok(())
+}
+
+#[test]
+fn both_endpoints_of_dependency_edge_must_charge_evidence_index_budget()
+-> Result<(), Diagnostic> {
+    let data = fixture(
+        false,
+        CryptoUseKind::ActiveUse,
+        ConflictState::Uncontested,
+        EvidenceBasis::Direct,
+    )?;
+    let make_system = |id: &str| GraphNode {
+        id: id.into(),
+        kind: GraphNodeKind::System,
+        evidence_ids: vec!["ev-1".into()],
+        observation_id: None,
+        observation_kind: None,
+    };
+    let graph = EvidenceGraph::new(
+        &data.0,
+        vec![make_system("app"), make_system("other")],
+        vec![GraphEdge {
+            from: "app".into(),
+            to: "other".into(),
+            relation: GraphRelation::DependsOn,
+            evidence_ids: vec!["ev-1".into()],
+        }],
+        &Limits::default(),
+    )?;
+    let topology = DependencyAnalysis::analyze(&graph, &Limits::default())?;
+    // Graph has 1 typed edge and 3 raw references, but this analysis
+    // materializes 4 endpoint-index references (2 node + 2 edge).
+    let limits = Limits {
+        max_graph_edges: 3,
+        ..Limits::default()
+    };
+    assert_eq!(
+        RiskAnalysis::analyze(&data.0, &graph, &topology, &[], &[], None, &limits)
+            .err().map(|e| e.code),
+        Some(DiagnosticCode::ResourceLimitExceeded)
+    );
+    Ok(())
+}
+
