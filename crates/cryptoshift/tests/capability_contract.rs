@@ -514,6 +514,26 @@ fn bounded_input_record_count_output_and_lookup_fail_closed() -> Result<(), Diag
         result.err().map(|x| x.code),
         Some(DiagnosticCode::ResourceLimitExceeded)
     );
+    let limited = Limits {
+        max_profile_references: 1,
+        ..Limits::default()
+    };
+    assert_eq!(
+        c.match_target(&t, select(None), 50, &limited)
+            .err()
+            .map(|x| x.code),
+        Some(DiagnosticCode::ResourceLimitExceeded)
+    );
+    let limited = Limits {
+        max_input_bytes: 10,
+        ..Limits::default()
+    };
+    assert_eq!(
+        c.match_target(&t, select(None), 50, &limited)
+            .err()
+            .map(|x| x.code),
+        Some(DiagnosticCode::ResourceLimitExceeded)
+    );
     assert!(ResourceKind::ProfileReferences.ceiling() > 1);
     Ok(())
 }
