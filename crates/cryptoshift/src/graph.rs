@@ -2,6 +2,7 @@
 //! This validates only topology and evidence, not quantum risk or safe migration.
 
 use std::collections::{BTreeMap, BTreeSet};
+use sha2::{Digest, Sha256};
 
 use crate::inventory::{CryptoUseKind, SnapshotDigest, ValidatedInventorySnapshot};
 use crate::{Diagnostic, DiagnosticCode, Limits, ResourceKind};
@@ -282,6 +283,46 @@ impl EvidenceGraph {
         })
     }
 
+    /// Deterministic SHA-256 content fingerprint of this entire typed graph.
+    ///
+    /// Includes the inventory digest, all canonical nodes, explicit use-site
+    /// classes, relationships and referenced evidence. This is a content
+    /// identity, not an authentication signature or infrastructure proof.
+    #[must_use]
+    pub fn fingerprint(&self) -> SnapshotDigest {
+        let mut hasher = Sha256::new();
+        hasher.update(b"CSHIFT_TYPED_GRAPH_V1");
+        hasher.update(self.source_digest.as_bytes());
+        hasher.update((self.nodes.len() as u64).to_be_bytes());
+        for node in &self.nodes {
+            hash_str(&mut hasher, &node.id);
+            hasher.update([node_kind_tag(node.kind)]);
+            match node.observation_id.as_deref() {
+                Some(id) => {
+                    hasher.update([1]);
+                    hash_str(&mut hasher, id);
+                }
+                None => hasher.update([0]),
+            }
+            match node.observation_kind {
+                Some(kind) => hasher.update([1, use_kind_tag(kind)]),
+                None => hasher.update([0]),
+            }
+            hash_refs(&mut hasher, &node.evidence_ids);
+        }
+        hasher.update((self.edges.len() as u64).to_be_bytes());
+        for edge in &self.edges {
+            hash_str(&mut hasher, &edge.from);
+            hash_str(&mut hasher, &edge.to);
+            hasher.update([relation_tag(edge.relation)]);
+            hash_refs(&mut hasher, &edge.evidence_ids);
+        }
+        let output = hasher.finalize();
+        let mut bytes = [0_u8; 32];
+        bytes.copy_from_slice(&output);
+        SnapshotDigest::from_bytes(bytes)
+    }
+
     /// Exact digest of the canonical inventory used as evidence authority.
     #[must_use]
     pub const fn source_digest(&self) -> SnapshotDigest {
@@ -298,6 +339,59 @@ impl EvidenceGraph {
     #[must_use]
     pub fn edges(&self) -> &[GraphEdge] {
         &self.edges
+    }
+}
+
+fn hash_str(hasher: &mut Sha256, value: &str) {
+    hasher.update((value.len() as u64).to_be_bytes());
+    hasher.update(value.as_bytes());
+}
+
+fn hash_refs(hasher: &mut Sha256, refs: &[String]) {
+    hasher.update((refs.len() as u64).to_be_bytes());
+    for value in refs {
+        hash_str(hasher, value);
+    }
+}
+
+fn node_kind_tag(kind: GraphNodeKind) -> u8 {
+    match kind {
+        GraphNodeKind::System => 1,
+        GraphNodeKind::CryptoUse => 2,
+        GraphNodeKind::Library => 3,
+        GraphNodeKind::Certificate => 4,
+        GraphNodeKind::TrustAnchor => 5,
+        GraphNodeKind::Key => 6,
+        GraphNodeKind::Hsm => 7,
+        GraphNodeKind::Data => 8,
+        GraphNodeKind::Owner => 9,
+        GraphNodeKind::Vendor => 10,
+    }
+}
+
+fn use_kind_tag(kind: CryptoUseKind) -> u8 {
+    match kind {
+        CryptoUseKind::ActiveUse => 1,
+        CryptoUseKind::LibraryCapability => 2,
+        CryptoUseKind::ConfiguredProtocol => 3,
+        CryptoUseKind::NegotiatedProtocol => 4,
+        CryptoUseKind::Unknown => 5,
+    }
+}
+
+fn relation_tag(relation: GraphRelation) -> u8 {
+    match relation {
+        GraphRelation::ExposesUse => 1,
+        GraphRelation::LoadsLibrary => 2,
+        GraphRelation::ImplementsUse => 3,
+        GraphRelation::UsesCertificate => 4,
+        GraphRelation::IssuedBy => 5,
+        GraphRelation::HoldsKey => 6,
+        GraphRelation::ProtectsData => 7,
+        GraphRelation::OwnedBy => 8,
+        GraphRelation::SuppliedBy => 9,
+        GraphRelation::DependsOn => 10,
+        GraphRelation::UsesHsm => 11,
     }
 }
 
