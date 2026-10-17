@@ -2,11 +2,10 @@
 
 use cryptoshift::{
     AlgorithmConstraint, AlgorithmRole, CAPABILITY_CATALOG_VERSION, CapabilityCatalog,
-    CapabilityCatalogDraft, CapabilityEvidence, CapabilityEvidenceBasis,
-    CapabilityRecord, CapabilitySelector, CapabilityState, ConstraintDisposition,
-    Diagnostic, EvidenceVerification, KnownAlgorithm, Limits, ProfileProvenance,
-    SecurityCategory, SnapshotDigest, StandardEdition, TARGET_PROFILE_VERSION,
-    TargetProfile, TargetProfileDraft,
+    CapabilityCatalogDraft, CapabilityEvidence, CapabilityEvidenceBasis, CapabilityRecord,
+    CapabilitySelector, CapabilityState, ConstraintDisposition, Diagnostic, EvidenceVerification,
+    KnownAlgorithm, Limits, ProfileProvenance, SecurityCategory, SnapshotDigest, StandardEdition,
+    TARGET_PROFILE_VERSION, TargetProfile, TargetProfileDraft,
 };
 
 fn main() -> Result<(), Diagnostic> {
@@ -105,18 +104,9 @@ fn main() -> Result<(), Diagnostic> {
         role: AlgorithmRole::KeyEncapsulation,
     };
     let vendor = catalog.match_target(&target, query(None), 50, &limits)?;
-    let verified = catalog.match_target(
-        &target,
-        query(Some("pod-image-sha256-abc")),
-        50,
-        &limits,
-    )?;
-    let missing = catalog.match_target(
-        &target,
-        query(Some("never-observed")),
-        50,
-        &limits,
-    )?;
+    let verified =
+        catalog.match_target(&target, query(Some("pod-image-sha256-abc")), 50, &limits)?;
+    let missing = catalog.match_target(&target, query(Some("never-observed")), 50, &limits)?;
     println!("vendor offering: {:?}", vendor.state);
     println!("exact runtime: {:?}", verified.state);
     println!("unobserved runtime: {:?}", missing.state);

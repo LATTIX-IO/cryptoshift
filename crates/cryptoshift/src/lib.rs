@@ -75,8 +75,7 @@ pub use target::{
 };
 
 pub use capability::{
-    CAPABILITY_CATALOG_VERSION, CapabilityCatalog, CapabilityCatalogDraft,
-    CapabilityEvidence, CapabilityEvidenceBasis, CapabilityMatch,
-    CapabilityMatchState, CapabilityRecord, CapabilitySelector, CapabilityState,
-    EvidenceVerification,
+    CAPABILITY_CATALOG_VERSION, CapabilityCatalog, CapabilityCatalogDraft, CapabilityEvidence,
+    CapabilityEvidenceBasis, CapabilityMatch, CapabilityMatchState, CapabilityRecord,
+    CapabilitySelector, CapabilityState, EvidenceVerification,
 };

@@ -1,13 +1,12 @@
 //! Public consumer contract tests for source-attributed capabilities.
 
 use cryptoshift::{
-    AlgorithmConstraint, AlgorithmRole, CapabilityCatalog, CapabilityCatalogDraft,
-    CapabilityEvidence, CapabilityEvidenceBasis, CapabilityMatchState,
-    CapabilityRecord, CapabilitySelector, CapabilityState, ConstraintDisposition,
-    Diagnostic, DiagnosticCode, EvidenceVerification, KnownAlgorithm, Limits,
-    ProfileProvenance, ResourceKind, SecurityCategory, SnapshotDigest,
-    StandardEdition, TargetDisposition, TargetProfile, TargetProfileDraft,
-    CAPABILITY_CATALOG_VERSION, TARGET_PROFILE_VERSION,
+    AlgorithmConstraint, AlgorithmRole, CAPABILITY_CATALOG_VERSION, CapabilityCatalog,
+    CapabilityCatalogDraft, CapabilityEvidence, CapabilityEvidenceBasis, CapabilityMatchState,
+    CapabilityRecord, CapabilitySelector, CapabilityState, ConstraintDisposition, Diagnostic,
+    DiagnosticCode, EvidenceVerification, KnownAlgorithm, Limits, ProfileProvenance, ResourceKind,
+    SecurityCategory, SnapshotDigest, StandardEdition, TARGET_PROFILE_VERSION, TargetDisposition,
+    TargetProfile, TargetProfileDraft,
 };
 
 fn source() -> ProfileProvenance {
@@ -126,8 +125,7 @@ fn error_code(result: Result<CapabilityCatalog, Diagnostic>) -> Option<Diagnosti
 }
 
 #[test]
-fn canonical_identity_is_order_independent_and_provenance_sensitive()
--> Result<(), Diagnostic> {
+fn canonical_identity_is_order_independent_and_provenance_sensitive() -> Result<(), Diagnostic> {
     let a = build(vec![
         vendor("z-available", CapabilityState::Available),
         vendor("a-preview", CapabilityState::Preview),
@@ -139,7 +137,10 @@ fn canonical_identity_is_order_independent_and_provenance_sensitive()
     assert_eq!(a.digest(), b.digest());
     assert_eq!(a.export(&Limits::default())?, b.export(&Limits::default())?);
     assert_eq!(a.content().records[0].record_id, "a-preview");
-    assert_eq!(&a.export(&Limits::default())?[..21], b"CSHIFT_CAPABILITY_V1\0");
+    assert_eq!(
+        &a.export(&Limits::default())?[..21],
+        b"CSHIFT_CAPABILITY_V1\0"
+    );
     a.verify_expected_digest(a.digest())?;
     assert_eq!(
         a.verify_expected_digest(SnapshotDigest::from_bytes([0_u8; 32]))
@@ -169,15 +170,17 @@ fn canonical_identity_is_order_independent_and_provenance_sensitive()
 }
 
 #[test]
-fn advertised_capability_is_neither_deployed_nor_negotiated()
--> Result<(), Diagnostic> {
+fn advertised_capability_is_neither_deployed_nor_negotiated() -> Result<(), Diagnostic> {
     let target = target("tenant-alpha", ConstraintDisposition::Required)?;
     let catalog = build(vec![
         vendor("vendor-listed", CapabilityState::Available),
         deployed(),
     ])?;
     let vendor_result = catalog.match_target(&target, select(None), 50, &Limits::default())?;
-    assert_eq!(vendor_result.target_disposition, TargetDisposition::Required);
+    assert_eq!(
+        vendor_result.target_disposition,
+        TargetDisposition::Required
+    );
     assert_eq!(
         vendor_result.state,
         CapabilityMatchState::Consistent(CapabilityState::Available)
@@ -217,13 +220,22 @@ fn incompatible_version_platform_provider_scope_and_role_never_inherit_claims()
     let runtime = Some("pod-image-sha256-abc");
     let mut s = select(runtime);
     s.product_version = "3.4.2";
-    assert_eq!(c.match_target(&t, s, 50, &Limits::default())?.state, CapabilityMatchState::NoEvidence);
+    assert_eq!(
+        c.match_target(&t, s, 50, &Limits::default())?.state,
+        CapabilityMatchState::NoEvidence
+    );
     let mut s = select(runtime);
     s.platform_id = "windows-x64";
-    assert_eq!(c.match_target(&t, s, 50, &Limits::default())?.state, CapabilityMatchState::NoEvidence);
+    assert_eq!(
+        c.match_target(&t, s, 50, &Limits::default())?.state,
+        CapabilityMatchState::NoEvidence
+    );
     let mut s = select(runtime);
     s.provider_id = "different-vendor";
-    assert_eq!(c.match_target(&t, s, 50, &Limits::default())?.state, CapabilityMatchState::NoEvidence);
+    assert_eq!(
+        c.match_target(&t, s, 50, &Limits::default())?.state,
+        CapabilityMatchState::NoEvidence
+    );
     let mut s = select(runtime);
     s.role = AlgorithmRole::Signature;
     assert_eq!(
@@ -251,8 +263,7 @@ fn incompatible_version_platform_provider_scope_and_role_never_inherit_claims()
 }
 
 #[test]
-fn roadmap_preview_unsupported_unknown_and_missing_are_distinct()
--> Result<(), Diagnostic> {
+fn roadmap_preview_unsupported_unknown_and_missing_are_distinct() -> Result<(), Diagnostic> {
     let t = target("tenant-alpha", ConstraintDisposition::Required)?;
     for state in [
         CapabilityState::Roadmap,
@@ -262,11 +273,15 @@ fn roadmap_preview_unsupported_unknown_and_missing_are_distinct()
     ] {
         let catalog = build(vec![vendor("one-fact", state)])?;
         assert_eq!(
-            catalog.match_target(&t, select(None), 50, &Limits::default())?.state,
+            catalog
+                .match_target(&t, select(None), 50, &Limits::default())?
+                .state,
             CapabilityMatchState::Consistent(state)
         );
         assert_eq!(
-            catalog.match_target(&t, select(Some("runtime-absent")), 50, &Limits::default())?.state,
+            catalog
+                .match_target(&t, select(Some("runtime-absent")), 50, &Limits::default())?
+                .state,
             CapabilityMatchState::NoEvidence
         );
     }
@@ -274,13 +289,15 @@ fn roadmap_preview_unsupported_unknown_and_missing_are_distinct()
     let advertised = build(vec![vendor("one-fact", CapabilityState::Available)])?;
     let status = advertised.match_target(&forbidden, select(None), 50, &Limits::default())?;
     assert_eq!(status.target_disposition, TargetDisposition::Forbidden);
-    assert_eq!(status.state, CapabilityMatchState::Consistent(CapabilityState::Available));
+    assert_eq!(
+        status.state,
+        CapabilityMatchState::Consistent(CapabilityState::Available)
+    );
     Ok(())
 }
 
 #[test]
-fn disagreeing_sources_are_preserved_not_overwritten()
--> Result<(), Diagnostic> {
+fn disagreeing_sources_are_preserved_not_overwritten() -> Result<(), Diagnostic> {
     let t = target("tenant-alpha", ConstraintDisposition::Required)?;
     let a = build(vec![
         vendor("v1", CapabilityState::Available),
@@ -295,7 +312,8 @@ fn disagreeing_sources_are_preserved_not_overwritten()
         vendor("v2", CapabilityState::Available),
     ])?;
     assert_eq!(
-        same.match_target(&t, select(None), 50, &Limits::default())?.state,
+        same.match_target(&t, select(None), 50, &Limits::default())?
+            .state,
         CapabilityMatchState::Consistent(CapabilityState::Available)
     );
     assert_ne!(a.digest(), same.digest());
@@ -303,8 +321,7 @@ fn disagreeing_sources_are_preserved_not_overwritten()
 }
 
 #[test]
-fn verified_deployment_claim_requires_runtime_and_checked_evidence()
--> Result<(), Diagnostic> {
+fn verified_deployment_claim_requires_runtime_and_checked_evidence() -> Result<(), Diagnostic> {
     let valid = deployed();
     build(vec![valid.clone()])?;
     for variant in 0..7 {
@@ -333,29 +350,52 @@ fn verified_deployment_claim_requires_runtime_and_checked_evidence()
 }
 
 #[test]
-fn explicit_clock_blocks_stale_future_and_unbounded_runtime_claims()
--> Result<(), Diagnostic> {
+fn explicit_clock_blocks_stale_future_and_unbounded_runtime_claims() -> Result<(), Diagnostic> {
     let good = deployed();
     assert_eq!(
-        error_code(CapabilityCatalog::new(draft(vec![good.clone()]), &Limits::default(), None)),
+        error_code(CapabilityCatalog::new(
+            draft(vec![good.clone()]),
+            &Limits::default(),
+            None
+        )),
         Some(DiagnosticCode::InvalidStateTransition)
     );
     assert_eq!(
-        error_code(CapabilityCatalog::new(draft(vec![good.clone()]), &Limits::default(), Some(100))),
+        error_code(CapabilityCatalog::new(
+            draft(vec![good.clone()]),
+            &Limits::default(),
+            Some(100)
+        )),
         Some(DiagnosticCode::StaleCriticalProfile)
     );
     assert_eq!(
-        error_code(CapabilityCatalog::new(draft(vec![good.clone()]), &Limits::default(), Some(9))),
+        error_code(CapabilityCatalog::new(
+            draft(vec![good.clone()]),
+            &Limits::default(),
+            Some(9)
+        )),
         Some(DiagnosticCode::InvalidStateTransition)
     );
     let c = build(vec![good.clone()])?;
     let t = target("tenant-alpha", ConstraintDisposition::Required)?;
     assert_eq!(
-        c.match_target(&t, select(Some("pod-image-sha256-abc")), 100, &Limits::default())?.state,
+        c.match_target(
+            &t,
+            select(Some("pod-image-sha256-abc")),
+            100,
+            &Limits::default()
+        )?
+        .state,
         CapabilityMatchState::Stale
     );
     assert_eq!(
-        c.match_target(&t, select(Some("pod-image-sha256-abc")), 9, &Limits::default())?.state,
+        c.match_target(
+            &t,
+            select(Some("pod-image-sha256-abc")),
+            9,
+            &Limits::default()
+        )?
+        .state,
         CapabilityMatchState::Stale
     );
     let mut backwards = good;
@@ -368,8 +408,8 @@ fn explicit_clock_blocks_stale_future_and_unbounded_runtime_claims()
 }
 
 #[test]
-fn duplicate_records_revisions_and_secret_bearing_identifiers_fail_closed()
--> Result<(), Diagnostic> {
+fn duplicate_records_revisions_and_secret_bearing_identifiers_fail_closed() -> Result<(), Diagnostic>
+{
     let a = vendor("same-id", CapabilityState::Available);
     let mut duplicate = a.clone();
     duplicate.state = CapabilityState::Roadmap;
@@ -380,53 +420,89 @@ fn duplicate_records_revisions_and_secret_bearing_identifiers_fail_closed()
     let mut bad = vendor("one", CapabilityState::Available);
     bad.evidence.source_id = "https://admin:secret@provider".into();
     let e = build(vec![bad]);
-    assert_eq!(e.as_ref().err().map(|x| x.code), Some(DiagnosticCode::InvalidIdentifier));
+    assert_eq!(
+        e.as_ref().err().map(|x| x.code),
+        Some(DiagnosticCode::InvalidIdentifier)
+    );
     if let Err(problem) = e {
         assert!(!problem.to_string().contains("secret"));
     }
     let mut bad = vendor("one", CapabilityState::Available);
     bad.product_id = "edge\ncredential".into();
-    assert_eq!(error_code(build(vec![bad])), Some(DiagnosticCode::InvalidIdentifier));
+    assert_eq!(
+        error_code(build(vec![bad])),
+        Some(DiagnosticCode::InvalidIdentifier)
+    );
     let mut bad = vendor("one", CapabilityState::Available);
     bad.scope_id = "tenant-beta".into();
-    assert_eq!(error_code(build(vec![bad])), Some(DiagnosticCode::InvalidReference));
+    assert_eq!(
+        error_code(build(vec![bad])),
+        Some(DiagnosticCode::InvalidReference)
+    );
     let mut bad = vendor("one", CapabilityState::Available);
     bad.role = AlgorithmRole::Signature;
-    assert_eq!(error_code(build(vec![bad])), Some(DiagnosticCode::InvalidStateTransition));
     assert_eq!(
-        KnownAlgorithm::parse_exact("ML-KEM-unknown").err().map(|x| x.code),
+        error_code(build(vec![bad])),
+        Some(DiagnosticCode::InvalidStateTransition)
+    );
+    assert_eq!(
+        KnownAlgorithm::parse_exact("ML-KEM-unknown")
+            .err()
+            .map(|x| x.code),
         Some(DiagnosticCode::InvalidReference)
     );
     let mut unsupported = draft(vec![vendor("one", CapabilityState::Available)]);
     unsupported.schema_version = 2;
     assert_eq!(
-        error_code(CapabilityCatalog::new(unsupported, &Limits::default(), Some(50))),
+        error_code(CapabilityCatalog::new(
+            unsupported,
+            &Limits::default(),
+            Some(50)
+        )),
         Some(DiagnosticCode::UnsupportedSchemaVersion)
     );
     Ok(())
 }
 
 #[test]
-fn bounded_input_record_count_output_and_lookup_fail_closed()
--> Result<(), Diagnostic> {
+fn bounded_input_record_count_output_and_lookup_fail_closed() -> Result<(), Diagnostic> {
     let records = vec![
         vendor("fact-one", CapabilityState::Available),
         vendor("fact-two", CapabilityState::Unknown),
     ];
     let case = [
-        Limits { max_profile_references: 1, ..Limits::default() },
-        Limits { max_evidence_records: 1, ..Limits::default() },
-        Limits { max_input_bytes: 10, ..Limits::default() },
-        Limits { max_export_bytes: 30, ..Limits::default() },
+        Limits {
+            max_profile_references: 1,
+            ..Limits::default()
+        },
+        Limits {
+            max_evidence_records: 1,
+            ..Limits::default()
+        },
+        Limits {
+            max_input_bytes: 10,
+            ..Limits::default()
+        },
+        Limits {
+            max_export_bytes: 30,
+            ..Limits::default()
+        },
     ];
     for limits in case {
         assert_eq!(
-            error_code(CapabilityCatalog::new(draft(records.clone()), &limits, Some(50))),
+            error_code(CapabilityCatalog::new(
+                draft(records.clone()),
+                &limits,
+                Some(50)
+            )),
             Some(DiagnosticCode::ResourceLimitExceeded)
         );
     }
     let c = build(records)?;
-    let too_small = Limits { max_export_bytes: 20, ..Limits::default() };
+    let too_small = Limits {
+        max_export_bytes: 20,
+        ..Limits::default()
+    };
     assert_eq!(
         c.export(&too_small).err().map(|x| x.code),
         Some(DiagnosticCode::ResourceLimitExceeded)

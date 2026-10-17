@@ -342,7 +342,12 @@ impl CapabilityCatalog {
             {
                 continue;
             }
-            charge(limits, ResourceKind::ExportBytes, &mut bytes, &claim.record_id)?;
+            charge(
+                limits,
+                ResourceKind::ExportBytes,
+                &mut bytes,
+                &claim.record_id,
+            )?;
             charge(
                 limits,
                 ResourceKind::ExportBytes,
@@ -537,9 +542,9 @@ fn preflight(draft: &CapabilityCatalogDraft, limits: &Limits) -> Result<(), Diag
 fn valid_id(value: &str, field: &'static str) -> Result<(), Diagnostic> {
     if value.is_empty()
         || value.len() > 256
-        || !value.bytes().all(|b| {
-            b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'/' | b':')
-        })
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'/' | b':'))
     {
         return Err(error(
             DiagnosticCode::InvalidIdentifier,
@@ -571,7 +576,8 @@ struct Writer<'a> {
 
 impl Writer<'_> {
     fn put(&mut self, bytes: &[u8]) -> Result<(), Diagnostic> {
-        self.limits.checked_add(ResourceKind::ExportBytes, self.bytes.len(), bytes.len())?;
+        self.limits
+            .checked_add(ResourceKind::ExportBytes, self.bytes.len(), bytes.len())?;
         self.bytes.extend_from_slice(bytes);
         Ok(())
     }
@@ -589,7 +595,11 @@ impl Writer<'_> {
     }
     fn string(&mut self, value: &str) -> Result<(), Diagnostic> {
         self.u32(u32::try_from(value.len()).map_err(|_| {
-            error(DiagnosticCode::ArithmeticOverflow, "capability_size", "field length overflowed")
+            error(
+                DiagnosticCode::ArithmeticOverflow,
+                "capability_size",
+                "field length overflowed",
+            )
         })?)?;
         self.put(value.as_bytes())
     }
@@ -652,7 +662,10 @@ fn verification_tag(value: EvidenceVerification) -> u8 {
 }
 
 fn encode(draft: &CapabilityCatalogDraft, limits: &Limits) -> Result<Vec<u8>, Diagnostic> {
-    let mut w = Writer { bytes: Vec::new(), limits };
+    let mut w = Writer {
+        bytes: Vec::new(),
+        limits,
+    };
     w.put(b"CSHIFT_CAPABILITY_V1\0")?;
     w.u16(draft.schema_version)?;
     w.string(&draft.catalog_id)?;
@@ -663,7 +676,11 @@ fn encode(draft: &CapabilityCatalogDraft, limits: &Limits) -> Result<Vec<u8>, Di
     w.string(&draft.provenance.revision)?;
     w.option_digest(draft.provenance.source_digest)?;
     w.u32(u32::try_from(draft.records.len()).map_err(|_| {
-        error(DiagnosticCode::ArithmeticOverflow, "capability_count", "record count overflowed")
+        error(
+            DiagnosticCode::ArithmeticOverflow,
+            "capability_count",
+            "record count overflowed",
+        )
     })?)?;
     for r in &draft.records {
         w.string(&r.record_id)?;
