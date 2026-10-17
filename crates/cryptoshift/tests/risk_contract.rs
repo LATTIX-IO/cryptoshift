@@ -386,7 +386,6 @@ fn incomplete_collection_and_scenario_assumptions_never_score() -> Result<(), Di
     );
     Ok(())
 }
-
 #[test]
 fn missing_second_profile_cannot_be_masked_by_a_known_severe_use() -> Result<(), Diagnostic> {
     let (inventory, graph, _) = fixture(
