@@ -27,6 +27,16 @@ pub enum DiagnosticCode {
     MalformedStructure,
     /// An input body was empty when content was required.
     EmptyPayload,
+    /// Serialized snapshot fails an independently supplied content digest.
+    IntegrityMismatch,
+    /// An inventory declares the same identity twice.
+    DuplicateRecord,
+    /// Referential integrity or scope constraint is violated.
+    InvalidReference,
+    /// The snapshot uses an unsupported identity or normalization generation.
+    UnsupportedIdentityVersion,
+    /// Incomplete collection attempts to assert a confirmed removal.
+    InvalidStateTransition,
 }
 
 impl DiagnosticCode {
@@ -43,6 +53,11 @@ impl DiagnosticCode {
             Self::StaleCriticalProfile => "CSHIFT_STALE_CRITICAL_PROFILE",
             Self::MalformedStructure => "CSHIFT_MALFORMED_STRUCTURE",
             Self::EmptyPayload => "CSHIFT_EMPTY_PAYLOAD",
+            Self::IntegrityMismatch => "CSHIFT_INTEGRITY_MISMATCH",
+            Self::DuplicateRecord => "CSHIFT_DUPLICATE_RECORD",
+            Self::InvalidReference => "CSHIFT_INVALID_REFERENCE",
+            Self::UnsupportedIdentityVersion => "CSHIFT_UNSUPPORTED_IDENTITY_VERSION",
+            Self::InvalidStateTransition => "CSHIFT_INVALID_STATE_TRANSITION",
         }
     }
 }

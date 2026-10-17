@@ -1,10 +1,9 @@
 //! Deterministic cryptographic-migration planning contracts.
 //!
-//! This early, unpublished increment only defines *trust-boundary preflight*:
-//! bounded resource admission, exact outer schema versions, and safe diagnostics.
-//! It does **not** parse external formats, validate crypto inventory semantics,
-//! implement policy evaluation, or generate migration plans. Format adapters in
-//! later increments must validate payload structure and provenance themselves.
+//! This early, unpublished library includes trust-boundary preflight plus a
+//! validated, canonical binary inventory snapshot contract. Its snapshots retain
+//! evidence and collection incompleteness; they are not authenticated observations.
+//! This crate does not yet evaluate policies or generate migration plans.
 //!
 //! # Example
 //!
@@ -28,6 +27,8 @@
 
 mod diagnostic;
 mod envelope;
+mod inventory;
+mod inventory_codec;
 mod limits;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
@@ -35,3 +36,10 @@ pub use envelope::{
     CriticalProfileReference, PreflightedEnvelope, SchemaKind, SchemaVersion, VersionedEnvelope,
 };
 pub use limits::{Limits, ParseBudget, ResourceKind};
+
+pub use inventory::{
+    AbsenceRecord, AbsenceStatus, CollectionCompleteness, CollectionRun, ConflictState,
+    CryptoObservation, CryptoUseKind, EvidenceBasis, EvidenceRecord, IDENTITY_VERSION,
+    InventoryArtifact, InventorySnapshot, NORMALIZATION_VERSION, SnapshotDigest,
+    ValidatedInventorySnapshot,
+};
