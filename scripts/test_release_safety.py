@@ -86,6 +86,16 @@ class ReleaseSafetyTests(unittest.TestCase):
         self.mutate(".github/workflows/ci.yml", "python3 scripts/release_safety.py --with-cargo", "echo skipped")
         self.reject("CI must enforce")
 
+    def test_release_action_requires_verified_v05142_commit(self):
+        """A floating or unreviewed pinned release-plz action is prohibited."""
+        self.mutate(".github/workflows/release-plz.yml", "release-plz/action@8921286633dfa0c4020f7f30bd1c14fe19cbb10e", "release-plz/action@0000000000000000000000000000000000000000")
+        self.reject("Release-plz action must use the reviewed pinned SHA")
+
+    def test_release_action_does_not_accept_floating_tags(self):
+        """A version-looking tag is not an immutable execution commitment."""
+        self.mutate(".github/workflows/release-plz.yml", "release-plz/action@8921286633dfa0c4020f7f30bd1c14fe19cbb10e", "release-plz/action@v0.5.142")
+        self.reject("Release-plz action must use the reviewed pinned SHA")
+
     def test_release_action_separation(self):
         """Regression scenario: release action separation."""
         self.put(".github/workflows/unsafe.yml", "jobs:\n  bad:\n    steps:\n      - uses: release-plz/action@abcdef\n")
