@@ -62,6 +62,25 @@ pub struct DirectFanout {
     pub evidence_ids: Vec<String>,
 }
 
+/// Direct non-prerequisite outgoing fanout for one graph node.
+///
+/// A source with multiple edges (for example one HSM with multiple keys)
+/// is reported independently of incoming shared-consumer counts. Edges
+/// may carry inferred evidence and are not proof of active use.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectOutgoingFanout {
+    /// Source node ID from the validated graph.
+    pub source_node_id: String,
+    /// Exact source node kind.
+    pub source_kind: GraphNodeKind,
+    /// Number of direct non-prerequisite outgoing edges.
+    pub outgoing_edge_count: usize,
+    /// Number of unique direct target nodes.
+    pub distinct_target_count: usize,
+    /// Sorted source evidence IDs from these outgoing edges.
+    pub evidence_ids: Vec<String>,
+}
+
 /// Canonical, read-only dependency and infrastructure topology.
 ///
 /// SCC analysis includes every `System` node, even an isolated system.
@@ -75,6 +94,7 @@ pub struct DependencyTopology {
     prerequisites: Vec<PrerequisiteArc>,
     dependency_first_order: Vec<String>,
     direct_fanout: Vec<DirectFanout>,
+    direct_outgoing_fanout: Vec<DirectOutgoingFanout>,
 }
 
 /// Stateless, deterministic dependency analyzer.
@@ -231,6 +251,7 @@ impl DependencyAnalysis {
             .map(|node| (node.id.as_str(), node.kind))
             .collect();
         let mut incoming: BTreeMap<&str, Incoming<'_>> = BTreeMap::new();
+        let mut outgoing: BTreeMap<&str, Outgoing<'_>> = BTreeMap::new();
 
         for edge in graph.edges() {
             if edge.relation == GraphRelation::DependsOn {
@@ -266,6 +287,17 @@ impl DependencyAnalysis {
                     limits.checked_add(ResourceKind::GraphEdges, state.edge_count, 1)?;
                 state.sources.insert(edge.from.as_str());
                 state
+                    .evidence
+                    .extend(edge.evidence_ids.iter().map(String::as_str));
+
+                let outbound = outgoing.entry(edge.from.as_str()).or_default();
+                outbound.edge_count = limits.checked_add(
+                    ResourceKind::GraphEdges,
+                    outbound.edge_count,
+                    1,
+                )?;
+                outbound.targets.insert(edge.to.as_str());
+                outbound
                     .evidence
                     .extend(edge.evidence_ids.iter().map(String::as_str));
             }
@@ -359,12 +391,36 @@ impl DependencyAnalysis {
                 evidence_ids,
             });
         }
+        let mut direct_outgoing_fanout = Vec::with_capacity(outgoing.len());
+        for (source, data) in outgoing {
+            let source_kind = *kind.get(source).ok_or_else(|| {
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "structural_source",
+                    "direct structural reference has no source node",
+                )
+            })?;
+            charge(limits, &mut output_bytes, source)?;
+            let mut evidence_ids = Vec::with_capacity(data.evidence.len());
+            for item in data.evidence {
+                charge(limits, &mut output_bytes, item)?;
+                evidence_ids.push(item.to_owned());
+            }
+            direct_outgoing_fanout.push(DirectOutgoingFanout {
+                source_node_id: source.to_owned(),
+                source_kind,
+                outgoing_edge_count: data.edge_count,
+                distinct_target_count: data.targets.len(),
+                evidence_ids,
+            });
+        }
         Ok(DependencyTopology {
             source_digest: graph.source_digest(),
             units,
             prerequisites,
             dependency_first_order,
             direct_fanout,
+            direct_outgoing_fanout,
         })
     }
 }
@@ -373,6 +429,13 @@ impl DependencyAnalysis {
 struct Incoming<'a> {
     edge_count: usize,
     sources: BTreeSet<&'a str>,
+    evidence: BTreeSet<&'a str>,
+}
+
+#[derive(Default)]
+struct Outgoing<'a> {
+    edge_count: usize,
+    targets: BTreeSet<&'a str>,
     evidence: BTreeSet<&'a str>,
 }
 
@@ -414,6 +477,12 @@ impl DependencyTopology {
     #[must_use]
     pub fn direct_fanout(&self) -> &[DirectFanout] {
         &self.direct_fanout
+    }
+
+    /// Direct non-prerequisite outgoing edges and unique structural targets.
+    #[must_use]
+    pub fn direct_outgoing_fanout(&self) -> &[DirectOutgoingFanout] {
+        &self.direct_outgoing_fanout
     }
 
     /// Iteratively collect all **transitive** prerequisite units of one unit.
