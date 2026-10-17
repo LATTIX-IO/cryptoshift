@@ -132,6 +132,26 @@ impl DependencyAnalysis {
             )?;
         }
 
+        // A small caller work budget must fail before BTreeMaps, adjacency
+        // vectors, or traversal stacks are allocated.
+        let system_count = graph
+            .nodes()
+            .iter()
+            .filter(|node| node.kind == GraphNodeKind::System)
+            .count();
+        let dependency_count = graph
+            .edges()
+            .iter()
+            .filter(|edge| edge.relation == GraphRelation::DependsOn)
+            .count();
+        limits.checked_add(
+            ResourceKind::PlannerCandidates,
+            system_count,
+            dependency_count,
+        )?;
+        // Bound the worst-case output text before source evidence aggregation.
+        preflight_output(graph, limits)?;
+
         // The source graph is validated and canonically sorted by FOSS-420.
         let systems: Vec<&str> = graph
             .nodes()
@@ -146,19 +166,6 @@ impl DependencyAnalysis {
             .collect();
         let mut forward = vec![Vec::<usize>::new(); systems.len()];
         let mut reverse = vec![Vec::<usize>::new(); systems.len()];
-        let dependency_count = graph
-            .edges()
-            .iter()
-            .filter(|edge| edge.relation == GraphRelation::DependsOn)
-            .count();
-
-        // Charge unique vertices and prerequisite edges as exploration
-        // candidates before allocating adjacency lists / traversal stacks.
-        limits.checked_add(
-            ResourceKind::PlannerCandidates,
-            systems.len(),
-            dependency_count,
-        )?;
         for edge in graph.edges() {
             if edge.relation != GraphRelation::DependsOn {
                 continue;
@@ -441,6 +448,57 @@ struct Outgoing<'a> {
 
 fn charge(limits: &Limits, total: &mut usize, value: &str) -> Result<(), Diagnostic> {
     *total = limits.checked_add(ResourceKind::ExportBytes, *total, value.len())?;
+    Ok(())
+}
+
+// Conservative upper bound for all emitted string content. It may reject
+// graphs whose deduplicated output would fit, but never admits a large
+// evidence aggregation merely because a prior validator had looser limits.
+fn preflight_output(
+    graph: &EvidenceGraph,
+    limits: &Limits,
+) -> Result<(), Diagnostic> {
+    let mut bytes = 0_usize;
+    let mut max_system_id = 0_usize;
+    for node in graph.nodes() {
+        if node.kind == GraphNodeKind::System {
+            max_system_id = max_system_id.max(node.id.len());
+            let triplicate = limits.checked_mul(
+                ResourceKind::ExportBytes,
+                node.id.len(),
+                3,
+            )?;
+            bytes = limits.checked_add(
+                ResourceKind::ExportBytes,
+                bytes,
+                triplicate,
+            )?;
+        }
+    }
+    let arc_names = limits.checked_mul(
+        ResourceKind::ExportBytes,
+        max_system_id,
+        2,
+    )?;
+    for edge in graph.edges() {
+        if edge.relation == GraphRelation::DependsOn {
+            bytes = limits.checked_add(
+                ResourceKind::ExportBytes,
+                bytes,
+                arc_names,
+            )?;
+        } else {
+            charge(limits, &mut bytes, &edge.from)?;
+            charge(limits, &mut bytes, &edge.to)?;
+        }
+        for evidence in &edge.evidence_ids {
+            charge(limits, &mut bytes, evidence)?;
+            if edge.relation != GraphRelation::DependsOn {
+                // An edge contributes to both incoming and outgoing views.
+                charge(limits, &mut bytes, evidence)?;
+            }
+        }
+    }
     Ok(())
 }
 
