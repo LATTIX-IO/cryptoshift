@@ -362,3 +362,29 @@ fn ten_thousand_systems_analyze_iteratively_without_stack_overflow() -> Result<(
     );
     Ok(())
 }
+
+#[test]
+fn hardware_use_relation_rejects_invalid_direction_or_kind() -> Result<(), Diagnostic> {
+    let nodes = vec![
+        node("service", GraphNodeKind::System),
+        node("hardware", GraphNodeKind::Hsm),
+        node("library", GraphNodeKind::Library),
+    ];
+    let wrong_source = graph(
+        nodes.clone(),
+        vec![link("library", "hardware", GraphRelation::UsesHsm)],
+    );
+    assert_eq!(
+        wrong_source.err().map(|e| e.code),
+        Some(DiagnosticCode::InvalidStateTransition)
+    );
+    let reversed = graph(
+        nodes,
+        vec![link("hardware", "service", GraphRelation::UsesHsm)],
+    );
+    assert_eq!(
+        reversed.err().map(|e| e.code),
+        Some(DiagnosticCode::InvalidStateTransition)
+    );
+    Ok(())
+}
