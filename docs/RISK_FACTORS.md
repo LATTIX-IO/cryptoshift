@@ -40,9 +40,13 @@ ContextAssessment provides only the seven nonderived factors (1, 2, 3, 5,
 and ClaimOrigin::AnalystAssessment or ScenarioAssumption. Attempts to override
 quantum_exposure, evidence_quality or dependency_complexity are rejected.
 
-QuantumAssessment is explicitly keyed to a known inventory observation.
-Posture is Susceptible, CandidateResistant or Unknown, **never inferred from
-the algorithm name**. It cannot promote ConfiguredProtocol or LibraryCapability
+QuantumAssessment is explicitly keyed to a known inventory observation,
+the **exact observation algorithm ID**, and the canonical inventory digest.
+ContextAssessment is likewise bound to that exact source digest. A stale
+assessment from a changed inventory is rejected rather than reinterpreted
+against a new algorithm or migration-unit context. Posture is Susceptible,
+CandidateResistant or Unknown, **never inferred from the algorithm name**.
+It cannot promote ConfiguredProtocol or LibraryCapability
 to active/negotiated use. Only ActiveUse and NegotiatedProtocol qualify for
 a known exposure level. Susceptible maps to Severe; CandidateResistant maps
 to Moderate, explicitly **not** safe or approved. Without a usable
@@ -104,8 +108,9 @@ FOSS-442.
 - Deduplicate and sort provenance IDs, observations and factor sources without
   conflating independent collectors.
 - Reject duplicate quantum profiles and contextual factors, incorrect unit
-  references, source IDs containing control bytes, unknown observations and
-  unauthorized overrides of derived factors.
+  references, stale claim digests, changed observation algorithm identities,
+  source IDs containing control bytes, unknown observations and unauthorized
+  overrides of derived factors.
 - Bound supplied profiles/claims, **aggregate external source-reference bytes
   before indexing**, cumulative graph evidence references, ten-factor-per-unit
   work, diagnostics and emitted ID/reference bytes with existing Limits and
@@ -127,7 +132,7 @@ FOSS-442.
 | Conflict and inferred evidence still visible next to Severe exposure | uncertainty_survives_known_severe_exposure |
 | Scenario assumptions and partial collection cannot score | incomplete_collection_and_scenario_assumptions_never_score |
 | Missing second quantum profile cannot be masked by one Severe claim | missing_second_profile_cannot_be_masked_by_a_known_severe_use |
-| Duplicate/missing/spoofed source references and derived override fail | invalid_sources_duplicates_and_derived_factor_overrides_rejected |
+| Duplicate/missing/derived-overridden claims, stale source digests and wrong algorithms fail | invalid_sources_duplicates_and_derived_factor_overrides_rejected |
 | Cross-snapshot mixing denied | mismatched_source_digests_fail_closed |
 | Unsupported score version, weights and resource exhaustion denied | invalid_profiles_and_tight_resource_budgets_fail_closed |
 | Excessive external claim-reference bytes rejected before indexing | external_source_text_is_bounded_before_building_assessment_indexes |
