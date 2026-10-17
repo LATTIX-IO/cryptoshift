@@ -298,11 +298,8 @@ impl DependencyAnalysis {
                     .extend(edge.evidence_ids.iter().map(String::as_str));
 
                 let outbound = outgoing.entry(edge.from.as_str()).or_default();
-                outbound.edge_count = limits.checked_add(
-                    ResourceKind::GraphEdges,
-                    outbound.edge_count,
-                    1,
-                )?;
+                outbound.edge_count =
+                    limits.checked_add(ResourceKind::GraphEdges, outbound.edge_count, 1)?;
                 outbound.targets.insert(edge.to.as_str());
                 outbound
                     .evidence
