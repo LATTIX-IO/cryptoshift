@@ -339,6 +339,8 @@ pub struct RiskReport {
     pub model_version: u16,
     /// Original canonical inventory content digest.
     pub source_digest: SnapshotDigest,
+    /// Exact typed graph used to derive topology and exposure relationships.
+    pub graph_fingerprint: SnapshotDigest,
     /// Optional fully inspectable weight profile.
     pub score_profile: Option<ScoreProfile>,
     /// Canonically ordered SCC-level evidence-first vectors.
