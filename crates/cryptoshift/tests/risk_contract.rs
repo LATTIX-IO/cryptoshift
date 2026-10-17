@@ -580,3 +580,29 @@ fn invalid_profiles_and_tight_resource_budgets_fail_closed() -> Result<(), Diagn
     }
     Ok(())
 }
+
+#[test]
+fn external_source_text_is_bounded_before_building_assessment_indexes()
+-> Result<(), Diagnostic> {
+    let data = fixture(
+        false,
+        CryptoUseKind::ActiveUse,
+        ConflictState::Uncontested,
+        EvidenceBasis::Direct,
+    )?;
+    let mut claims = complete_context(ClaimOrigin::AnalystAssessment);
+    for claim in &mut claims {
+        claim.source_reference = format!("reference-{}", "x".repeat(180));
+    }
+    let limits = Limits {
+        max_input_bytes: 1024,
+        ..Limits::default()
+    };
+    let outcome = assess(&data, &[], &claims, None, &limits);
+    assert_eq!(
+        outcome.err().map(|e| e.code),
+        Some(DiagnosticCode::ResourceLimitExceeded)
+    );
+    Ok(())
+}
+
