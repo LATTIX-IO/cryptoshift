@@ -22,6 +22,7 @@ GraphRelation is typed and directional:
 - ImplementsUse: Library -> CryptoUse
 - UsesCertificate: System -> Certificate
 - IssuedBy: Certificate -> TrustAnchor
+- UsesHsm: System -> Hsm (source-attributed configured/observed use, not independent proof)
 - HoldsKey: Hsm -> Key
 - ProtectsData: Key -> Data
 - OwnedBy: System / Data / Key / Certificate / Hsm -> Owner

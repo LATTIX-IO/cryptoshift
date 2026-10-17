@@ -47,6 +47,8 @@ pub enum GraphRelation {
     UsesCertificate,
     /// Certificate -> TrustAnchor: certificate chains to a trust anchor.
     IssuedBy,
+    /// System -> Hsm: evidence of configured or observed hardware use.
+    UsesHsm,
     /// Hsm -> Key: key material is held by hardware.
     HoldsKey,
     /// Key -> Data: key protects data.
@@ -68,6 +70,7 @@ impl GraphRelation {
             Self::ImplementsUse => from == N::Library && to == N::CryptoUse,
             Self::UsesCertificate => from == N::System && to == N::Certificate,
             Self::IssuedBy => from == N::Certificate && to == N::TrustAnchor,
+            Self::UsesHsm => from == N::System && to == N::Hsm,
             Self::HoldsKey => from == N::Hsm && to == N::Key,
             Self::ProtectsData => from == N::Key && to == N::Data,
             Self::OwnedBy => {
