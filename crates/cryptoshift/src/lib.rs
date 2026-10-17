@@ -49,5 +49,6 @@ pub use inventory::{
 pub use graph::{EvidenceGraph, GraphEdge, GraphNode, GraphNodeKind, GraphRelation};
 
 pub use topology::{
-    DependencyAnalysis, DependencyTopology, DirectFanout, MigrationUnit, PrerequisiteArc,
+    DependencyAnalysis, DependencyTopology, DirectFanout, DirectOutgoingFanout, MigrationUnit,
+    PrerequisiteArc,
 };
