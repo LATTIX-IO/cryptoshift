@@ -1,9 +1,8 @@
 //! Public, synthetic end-to-end prerequisite analysis (no network or changes).
 use cryptoshift::{
-    CollectionCompleteness, CollectionRun, DependencyAnalysis, Diagnostic,
-    EvidenceBasis, EvidenceGraph, EvidenceRecord, GraphEdge, GraphNode,
-    GraphNodeKind, GraphRelation, IDENTITY_VERSION, InventorySnapshot,
-    Limits, NORMALIZATION_VERSION, ValidatedInventorySnapshot,
+    CollectionCompleteness, CollectionRun, DependencyAnalysis, Diagnostic, EvidenceBasis,
+    EvidenceGraph, EvidenceRecord, GraphEdge, GraphNode, GraphNodeKind, GraphRelation,
+    IDENTITY_VERSION, InventorySnapshot, Limits, NORMALIZATION_VERSION, ValidatedInventorySnapshot,
 };
 
 fn system(id: &str) -> GraphNode {
@@ -55,10 +54,7 @@ fn main() -> Result<(), Diagnostic> {
     let graph = EvidenceGraph::new(
         &snapshot,
         vec![system("frontend"), system("api"), system("database")],
-        vec![
-            dependency("frontend", "api"),
-            dependency("api", "database"),
-        ],
+        vec![dependency("frontend", "api"), dependency("api", "database")],
         &limits,
     )?;
     let topology = DependencyAnalysis::analyze(&graph, &limits)?;
@@ -68,7 +64,10 @@ fn main() -> Result<(), Diagnostic> {
         "frontend prerequisites: {:?}",
         topology.prerequisite_chain("frontend", &limits)?
     );
-    println!("cycles: {}", topology.units().iter().filter(|unit| unit.cyclic).count());
+    println!(
+        "cycles: {}",
+        topology.units().iter().filter(|unit| unit.cyclic).count()
+    );
     println!("No policy decision, readiness assessment, or infrastructure change.");
     Ok(())
 }

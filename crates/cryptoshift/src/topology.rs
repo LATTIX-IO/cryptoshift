@@ -7,8 +7,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    Diagnostic, DiagnosticCode, EvidenceGraph, GraphNodeKind, GraphRelation, Limits,
-    ResourceKind, SnapshotDigest,
+    Diagnostic, DiagnosticCode, EvidenceGraph, GraphNodeKind, GraphRelation, Limits, ResourceKind,
+    SnapshotDigest,
 };
 
 /// An indivisible planning candidate: a strongly connected group of systems.
@@ -196,10 +196,7 @@ impl DependencyAnalysis {
             for &system_idx in members {
                 membership[system_idx] = unit_idx;
             }
-            let names: Vec<String> = members
-                .iter()
-                .map(|&id| systems[id].to_owned())
-                .collect();
+            let names: Vec<String> = members.iter().map(|&id| systems[id].to_owned()).collect();
             units.push(MigrationUnit {
                 id: names[0].clone(),
                 system_ids: names,
@@ -208,10 +205,8 @@ impl DependencyAnalysis {
             });
         }
 
-        let mut internal: Vec<BTreeSet<&str>> =
-            vec![BTreeSet::new(); units.len()];
-        let mut arcs: BTreeMap<(usize, usize), BTreeSet<&str>> =
-            BTreeMap::new();
+        let mut internal: Vec<BTreeSet<&str>> = vec![BTreeSet::new(); units.len()];
+        let mut arcs: BTreeMap<(usize, usize), BTreeSet<&str>> = BTreeMap::new();
         let kind: BTreeMap<&str, GraphNodeKind> = graph
             .nodes()
             .iter()
@@ -241,9 +236,7 @@ impl DependencyAnalysis {
                     if from == to {
                         units[dependent].cyclic = true;
                     }
-                    internal[dependent].extend(
-                        edge.evidence_ids.iter().map(String::as_str),
-                    );
+                    internal[dependent].extend(edge.evidence_ids.iter().map(String::as_str));
                 } else {
                     arcs.entry((dependent, prerequisite))
                         .or_default()
@@ -251,15 +244,12 @@ impl DependencyAnalysis {
                 }
             } else {
                 let state = incoming.entry(edge.to.as_str()).or_default();
-                state.edge_count = limits.checked_add(
-                    ResourceKind::GraphEdges,
-                    state.edge_count,
-                    1,
-                )?;
+                state.edge_count =
+                    limits.checked_add(ResourceKind::GraphEdges, state.edge_count, 1)?;
                 state.sources.insert(edge.from.as_str());
-                state.evidence.extend(
-                    edge.evidence_ids.iter().map(String::as_str),
-                );
+                state
+                    .evidence
+                    .extend(edge.evidence_ids.iter().map(String::as_str));
             }
         }
 
@@ -279,11 +269,7 @@ impl DependencyAnalysis {
         let mut unmet = vec![0_usize; units.len()];
         let mut dependents: Vec<Vec<usize>> = vec![Vec::new(); units.len()];
         for ((dependent, prerequisite), references) in arcs {
-            unmet[dependent] = limits.checked_add(
-                ResourceKind::GraphEdges,
-                unmet[dependent],
-                1,
-            )?;
+            unmet[dependent] = limits.checked_add(ResourceKind::GraphEdges, unmet[dependent], 1)?;
             dependents[prerequisite].push(dependent);
             let id = &units[dependent].id;
             let required = &units[prerequisite].id;
@@ -372,24 +358,12 @@ struct Incoming<'a> {
     evidence: BTreeSet<&'a str>,
 }
 
-fn charge(
-    limits: &Limits,
-    total: &mut usize,
-    value: &str,
-) -> Result<(), Diagnostic> {
-    *total = limits.checked_add(
-        ResourceKind::ExportBytes,
-        *total,
-        value.len(),
-    )?;
+fn charge(limits: &Limits, total: &mut usize, value: &str) -> Result<(), Diagnostic> {
+    *total = limits.checked_add(ResourceKind::ExportBytes, *total, value.len())?;
     Ok(())
 }
 
-fn problem(
-    code: DiagnosticCode,
-    subject: &'static str,
-    reason: &'static str,
-) -> Diagnostic {
+fn problem(code: DiagnosticCode, subject: &'static str, reason: &'static str) -> Diagnostic {
     Diagnostic::new(code, subject, reason)
 }
 
@@ -473,11 +447,7 @@ impl DependencyTopology {
         let mut stack = vec![root];
         let mut examined = 0_usize;
         while let Some(node) = stack.pop() {
-            examined = limits.checked_add(
-                ResourceKind::PlannerCandidates,
-                examined,
-                1,
-            )?;
+            examined = limits.checked_add(ResourceKind::PlannerCandidates, examined, 1)?;
             for &prior in &links[node] {
                 if !seen[prior] {
                     seen[prior] = true;

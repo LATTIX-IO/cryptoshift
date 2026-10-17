@@ -1,11 +1,10 @@
 //! Public API contract and adversarial acceptance tests for SCC topology.
 
 use cryptoshift::{
-    CollectionCompleteness, CollectionRun, ConflictState, CryptoObservation,
-    CryptoUseKind, DependencyAnalysis, Diagnostic, DiagnosticCode, EvidenceBasis,
-    EvidenceGraph, EvidenceRecord, GraphEdge, GraphNode, GraphNodeKind,
-    GraphRelation, IDENTITY_VERSION, InventorySnapshot, Limits,
-    NORMALIZATION_VERSION, ResourceKind, ValidatedInventorySnapshot,
+    CollectionCompleteness, CollectionRun, ConflictState, CryptoObservation, CryptoUseKind,
+    DependencyAnalysis, Diagnostic, DiagnosticCode, EvidenceBasis, EvidenceGraph, EvidenceRecord,
+    GraphEdge, GraphNode, GraphNodeKind, GraphRelation, IDENTITY_VERSION, InventorySnapshot,
+    Limits, NORMALIZATION_VERSION, ResourceKind, ValidatedInventorySnapshot,
 };
 
 fn snapshot() -> Result<ValidatedInventorySnapshot, Diagnostic> {
@@ -76,16 +75,12 @@ fn dependency(from: &str, to: &str) -> GraphEdge {
     link(from, to, GraphRelation::DependsOn)
 }
 
-fn graph(
-    nodes: Vec<GraphNode>,
-    edges: Vec<GraphEdge>,
-) -> Result<EvidenceGraph, Diagnostic> {
+fn graph(nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> Result<EvidenceGraph, Diagnostic> {
     EvidenceGraph::new(&snapshot()?, nodes, edges, &Limits::default())
 }
 
 #[test]
-fn chain_has_prerequisites_first_and_is_order_invariant()
--> Result<(), Diagnostic> {
+fn chain_has_prerequisites_first_and_is_order_invariant() -> Result<(), Diagnostic> {
     let vertices = vec![
         node("A", GraphNodeKind::System),
         node("C", GraphNodeKind::System),
@@ -94,10 +89,7 @@ fn chain_has_prerequisites_first_and_is_order_invariant()
     let edges = vec![dependency("A", "B"), dependency("B", "C")];
     let baseline = graph(vertices.clone(), edges.clone())?;
     let topology = DependencyAnalysis::analyze(&baseline, &Limits::default())?;
-    assert_eq!(
-        topology.dependency_first_order(),
-        ["C", "B", "A"]
-    );
+    assert_eq!(topology.dependency_first_order(), ["C", "B", "A"]);
     assert_eq!(
         topology.prerequisite_chain("A", &Limits::default())?,
         ["C", "B"]
@@ -108,19 +100,14 @@ fn chain_has_prerequisites_first_and_is_order_invariant()
     );
     assert_eq!(topology.source_digest(), baseline.source_digest());
     assert_eq!(topology.prerequisites().len(), 2);
-    assert_eq!(
-        topology.prerequisites()[0].evidence_ids,
-        ["ev-inferred"]
-    );
+    assert_eq!(topology.prerequisites()[0].evidence_ids, ["ev-inferred"]);
 
     let mut reverse_vertices = vertices;
     reverse_vertices.reverse();
     let mut reverse_edges = edges;
     reverse_edges.reverse();
-    let reversed = DependencyAnalysis::analyze(
-        &graph(reverse_vertices, reverse_edges)?,
-        &Limits::default(),
-    )?;
+    let reversed =
+        DependencyAnalysis::analyze(&graph(reverse_vertices, reverse_edges)?, &Limits::default())?;
     assert_eq!(topology.units(), reversed.units());
     assert_eq!(topology.prerequisites(), reversed.prerequisites());
     assert_eq!(
@@ -131,8 +118,7 @@ fn chain_has_prerequisites_first_and_is_order_invariant()
 }
 
 #[test]
-fn diamond_chain_has_unique_dependency_first_order()
--> Result<(), Diagnostic> {
+fn diamond_chain_has_unique_dependency_first_order() -> Result<(), Diagnostic> {
     let nodes = ["D", "B", "A", "C"]
         .into_iter()
         .map(|id| node(id, GraphNodeKind::System))
@@ -143,28 +129,18 @@ fn diamond_chain_has_unique_dependency_first_order()
         dependency("A", "B"),
         dependency("B", "D"),
     ];
-    let topology = DependencyAnalysis::analyze(
-        &graph(nodes, edges)?,
-        &Limits::default(),
-    )?;
-    assert_eq!(
-        topology.dependency_first_order(),
-        ["D", "B", "C", "A"]
-    );
+    let topology = DependencyAnalysis::analyze(&graph(nodes, edges)?, &Limits::default())?;
+    assert_eq!(topology.dependency_first_order(), ["D", "B", "C", "A"]);
     assert_eq!(
         topology.prerequisite_chain("A", &Limits::default())?,
         ["D", "B", "C"]
     );
-    assert_eq!(
-        topology.prerequisite_chain("B", &Limits::default())?,
-        ["D"]
-    );
+    assert_eq!(topology.prerequisite_chain("B", &Limits::default())?, ["D"]);
     Ok(())
 }
 
 #[test]
-fn nontrivial_cycles_self_loops_and_isolated_systems_preserved()
--> Result<(), Diagnostic> {
+fn nontrivial_cycles_self_loops_and_isolated_systems_preserved() -> Result<(), Diagnostic> {
     let systems = ["A", "B", "C", "D", "E", "F", "G"]
         .into_iter()
         .map(|id| node(id, GraphNodeKind::System))
@@ -178,10 +154,7 @@ fn nontrivial_cycles_self_loops_and_isolated_systems_preserved()
         dependency("G", "F"),
         dependency("E", "A"),
     ];
-    let topology = DependencyAnalysis::analyze(
-        &graph(systems, edges)?,
-        &Limits::default(),
-    )?;
+    let topology = DependencyAnalysis::analyze(&graph(systems, edges)?, &Limits::default())?;
     assert_eq!(topology.units().len(), 4);
     assert_eq!(topology.units()[0].system_ids, ["A", "B", "C"]);
     assert!(topology.units()[0].cyclic);
@@ -195,10 +168,7 @@ fn nontrivial_cycles_self_loops_and_isolated_systems_preserved()
     assert!(!topology.units()[2].cyclic);
     assert_eq!(topology.units()[3].system_ids, ["F", "G"]);
     assert!(topology.units()[3].cyclic);
-    assert_eq!(
-        topology.dependency_first_order(),
-        ["A", "D", "E", "F"]
-    );
+    assert_eq!(topology.dependency_first_order(), ["A", "D", "E", "F"]);
     assert_eq!(topology.prerequisites().len(), 1);
     assert_eq!(topology.prerequisites()[0].dependent_unit, "E");
     assert_eq!(topology.prerequisites()[0].prerequisite_unit, "A");
@@ -207,8 +177,7 @@ fn nontrivial_cycles_self_loops_and_isolated_systems_preserved()
 }
 
 #[test]
-fn structural_shared_infrastructure_is_direct_not_transitive()
--> Result<(), Diagnostic> {
+fn structural_shared_infrastructure_is_direct_not_transitive() -> Result<(), Diagnostic> {
     let nodes = vec![
         node("app-a", GraphNodeKind::System),
         node("app-b", GraphNodeKind::System),
@@ -232,10 +201,7 @@ fn structural_shared_infrastructure_is_direct_not_transitive()
         link("shared-hsm", "key-1", GraphRelation::HoldsKey),
         link("shared-lib", "vendor", GraphRelation::SuppliedBy),
     ];
-    let topology = DependencyAnalysis::analyze(
-        &graph(nodes, edges)?,
-        &Limits::default(),
-    )?;
+    let topology = DependencyAnalysis::analyze(&graph(nodes, edges)?, &Limits::default())?;
     assert_eq!(topology.units().len(), 2);
     assert!(topology.prerequisites().is_empty());
     let by_target: std::collections::BTreeMap<&str, _> = topology
@@ -262,8 +228,7 @@ fn structural_shared_infrastructure_is_direct_not_transitive()
 }
 
 #[test]
-fn structural_crypto_use_retains_original_configured_classification()
--> Result<(), Diagnostic> {
+fn structural_crypto_use_retains_original_configured_classification() -> Result<(), Diagnostic> {
     let mut use_site = node("use-1", GraphNodeKind::CryptoUse);
     use_site.observation_id = Some("obs-configured".into());
     use_site.observation_kind = Some(CryptoUseKind::ConfiguredProtocol);
@@ -274,17 +239,16 @@ fn structural_crypto_use_retains_original_configured_classification()
     let topology = DependencyAnalysis::analyze(&graph, &Limits::default())?;
     assert_eq!(topology.units().len(), 1);
     assert_eq!(topology.direct_fanout().len(), 1);
-    assert_eq!(graph.nodes()[1].observation_kind, Some(CryptoUseKind::ConfiguredProtocol));
     assert_eq!(
-        topology.direct_fanout()[0].evidence_ids,
-        ["ev-inferred"]
+        graph.nodes()[1].observation_kind,
+        Some(CryptoUseKind::ConfiguredProtocol)
     );
+    assert_eq!(topology.direct_fanout()[0].evidence_ids, ["ev-inferred"]);
     Ok(())
 }
 
 #[test]
-fn bounded_analysis_and_chain_fail_closed()
--> Result<(), Diagnostic> {
+fn bounded_analysis_and_chain_fail_closed() -> Result<(), Diagnostic> {
     let base = graph(
         ["A", "B", "C"]
             .into_iter()
@@ -298,7 +262,8 @@ fn bounded_analysis_and_chain_fail_closed()
     };
     assert_eq!(
         DependencyAnalysis::analyze(&base, &limits)
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::ResourceLimitExceeded)
     );
     let limits = Limits {
@@ -307,7 +272,8 @@ fn bounded_analysis_and_chain_fail_closed()
     };
     assert_eq!(
         DependencyAnalysis::analyze(&base, &limits)
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::ResourceLimitExceeded)
     );
     let limits = Limits {
@@ -316,7 +282,8 @@ fn bounded_analysis_and_chain_fail_closed()
     };
     assert_eq!(
         DependencyAnalysis::analyze(&base, &limits)
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::ResourceLimitExceeded)
     );
     let limits = Limits {
@@ -325,7 +292,8 @@ fn bounded_analysis_and_chain_fail_closed()
     };
     assert_eq!(
         DependencyAnalysis::analyze(&base, &limits)
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::ResourceLimitExceeded)
     );
     let topology = DependencyAnalysis::analyze(&base, &Limits::default())?;
@@ -334,22 +302,28 @@ fn bounded_analysis_and_chain_fail_closed()
         ..Limits::default()
     };
     assert_eq!(
-        topology.prerequisite_chain("A", &limits)
-            .err().map(|e| e.code),
+        topology
+            .prerequisite_chain("A", &limits)
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::ResourceLimitExceeded)
     );
     assert_eq!(
-        topology.prerequisite_chain("nonexistent", &Limits::default())
-            .err().map(|e| e.code),
+        topology
+            .prerequisite_chain("nonexistent", &Limits::default())
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::InvalidReference)
     );
-    assert_eq!(ResourceKind::PlannerCandidates.as_str(), "planner_candidates");
+    assert_eq!(
+        ResourceKind::PlannerCandidates.as_str(),
+        "planner_candidates"
+    );
     Ok(())
 }
 
 #[test]
-fn ten_thousand_systems_analyze_iteratively_without_stack_overflow()
--> Result<(), Diagnostic> {
+fn ten_thousand_systems_analyze_iteratively_without_stack_overflow() -> Result<(), Diagnostic> {
     let node_count = 10_000_usize;
     let vertices: Vec<GraphNode> = (0..node_count)
         .map(|i| node(&format!("system-{i:05}"), GraphNodeKind::System))
