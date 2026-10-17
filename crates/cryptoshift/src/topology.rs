@@ -451,39 +451,20 @@ fn charge(limits: &Limits, total: &mut usize, value: &str) -> Result<(), Diagnos
 // Conservative upper bound for all emitted string content. It may reject
 // graphs whose deduplicated output would fit, but never admits a large
 // evidence aggregation merely because a prior validator had looser limits.
-fn preflight_output(
-    graph: &EvidenceGraph,
-    limits: &Limits,
-) -> Result<(), Diagnostic> {
+fn preflight_output(graph: &EvidenceGraph, limits: &Limits) -> Result<(), Diagnostic> {
     let mut bytes = 0_usize;
     let mut max_system_id = 0_usize;
     for node in graph.nodes() {
         if node.kind == GraphNodeKind::System {
             max_system_id = max_system_id.max(node.id.len());
-            let triplicate = limits.checked_mul(
-                ResourceKind::ExportBytes,
-                node.id.len(),
-                3,
-            )?;
-            bytes = limits.checked_add(
-                ResourceKind::ExportBytes,
-                bytes,
-                triplicate,
-            )?;
+            let triplicate = limits.checked_mul(ResourceKind::ExportBytes, node.id.len(), 3)?;
+            bytes = limits.checked_add(ResourceKind::ExportBytes, bytes, triplicate)?;
         }
     }
-    let arc_names = limits.checked_mul(
-        ResourceKind::ExportBytes,
-        max_system_id,
-        2,
-    )?;
+    let arc_names = limits.checked_mul(ResourceKind::ExportBytes, max_system_id, 2)?;
     for edge in graph.edges() {
         if edge.relation == GraphRelation::DependsOn {
-            bytes = limits.checked_add(
-                ResourceKind::ExportBytes,
-                bytes,
-                arc_names,
-            )?;
+            bytes = limits.checked_add(ResourceKind::ExportBytes, bytes, arc_names)?;
         } else {
             charge(limits, &mut bytes, &edge.from)?;
             charge(limits, &mut bytes, &edge.to)?;
