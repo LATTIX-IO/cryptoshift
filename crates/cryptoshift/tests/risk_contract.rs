@@ -726,4 +726,3 @@ fn both_endpoints_of_dependency_edge_must_charge_evidence_index_budget() -> Resu
     );
     Ok(())
 }
-
