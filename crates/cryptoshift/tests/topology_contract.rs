@@ -286,6 +286,18 @@ fn bounded_analysis_and_chain_fail_closed() -> Result<(), Diagnostic> {
             .map(|e| e.code),
         Some(DiagnosticCode::ResourceLimitExceeded)
     );
+    // Edge count (2) is in range, but the three node + two edge
+    // evidence references exceed this stricter caller budget.
+    let limits = Limits {
+        max_graph_edges: 4,
+        ..Limits::default()
+    };
+    assert_eq!(
+        DependencyAnalysis::analyze(&base, &limits)
+            .err()
+            .map(|e| e.code),
+        Some(DiagnosticCode::ResourceLimitExceeded)
+    );
     let limits = Limits {
         max_export_bytes: 1,
         ..Limits::default()
