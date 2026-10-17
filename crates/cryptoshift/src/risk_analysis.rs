@@ -36,6 +36,9 @@ impl RiskAnalysis {
         limits: &Limits,
     ) -> Result<RiskReport, Diagnostic> {
         limits.validate()?;
+        limits.check(ResourceKind::GraphNodes, graph.nodes().len())?;
+        limits.check(ResourceKind::GraphEdges, graph.edges().len())?;
+        limits.check(ResourceKind::GraphNodes, topology.units().len())?;
         let digest = inventory.export(limits)?.digest;
         if digest != graph.source_digest() || digest != topology.source_digest() {
             return Err(problem(
@@ -44,9 +47,6 @@ impl RiskAnalysis {
                 "risk inputs must share the same canonical inventory digest",
             ));
         }
-        limits.check(ResourceKind::GraphNodes, graph.nodes().len())?;
-        limits.check(ResourceKind::GraphEdges, graph.edges().len())?;
-        limits.check(ResourceKind::GraphNodes, topology.units().len())?;
         limits.checked_mul(
             ResourceKind::PlannerCandidates,
             topology.units().len(),
@@ -97,6 +97,64 @@ impl RiskAnalysis {
         for edge in graph.edges() {
             attached =
                 limits.checked_add(ResourceKind::GraphEdges, attached, edge.evidence_ids.len())?;
+        }
+
+        // Each system-to-system edge is indexed at BOTH endpoints. Account
+        // for that work independently of the graph's original edge/reference
+        // count, before allocating any evidence-index BTreeSets.
+        let mut projected = 0_usize;
+        for node in graph.nodes() {
+            if node.kind == GraphNodeKind::System {
+                projected = limits.checked_add(
+                    ResourceKind::GraphEdges,
+                    projected,
+                    node.evidence_ids.len(),
+                )?;
+            }
+        }
+        for edge in graph.edges() {
+            let from = graph
+                .nodes()
+                .binary_search_by(|node| node.id.as_str().cmp(edge.from.as_str()))
+                .map_err(|_| {
+                    problem(
+                        DiagnosticCode::InvalidReference,
+                        "risk_graph_from",
+                        "risk graph contains unknown edge source",
+                    )
+                })?;
+            let to = graph
+                .nodes()
+                .binary_search_by(|node| node.id.as_str().cmp(edge.to.as_str()))
+                .map_err(|_| {
+                    problem(
+                        DiagnosticCode::InvalidReference,
+                        "risk_graph_to",
+                        "risk graph contains unknown edge target",
+                    )
+                })?;
+            if graph.nodes()[from].kind == GraphNodeKind::System {
+                projected = limits.checked_add(
+                    ResourceKind::GraphEdges,
+                    projected,
+                    edge.evidence_ids.len(),
+                )?;
+            }
+            if graph.nodes()[to].kind == GraphNodeKind::System {
+                projected = limits.checked_add(
+                    ResourceKind::GraphEdges,
+                    projected,
+                    edge.evidence_ids.len(),
+                )?;
+            }
+        }
+        let graph_fingerprint = graph.fingerprint();
+        if graph_fingerprint != topology.graph_fingerprint() {
+            return Err(problem(
+                DiagnosticCode::IntegrityMismatch,
+                "risk_graph_topology",
+                "topology must be derived from the exact supplied typed graph",
+            ));
         }
 
         let snap = inventory.snapshot();
@@ -339,6 +397,7 @@ impl RiskAnalysis {
         Ok(RiskReport {
             model_version: RISK_FACTOR_VERSION,
             source_digest: digest,
+            graph_fingerprint,
             score_profile: scoring.cloned(),
             units: results,
         })
