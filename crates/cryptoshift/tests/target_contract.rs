@@ -411,7 +411,8 @@ fn deadlines_and_expiration_are_opt_in_with_explicit_evaluation() -> Result<(), 
     asserted.expires_at_unix_secs = Some(1000);
     assert_eq!(
         TargetProfile::new(asserted.clone(), &Limits::default(), None)
-            .err().map(|e| e.code),
+            .err()
+            .map(|e| e.code),
         Some(DiagnosticCode::InvalidStateTransition)
     );
     assert!(TargetProfile::new(asserted.clone(), &Limits::default(), Some(999)).is_ok());
