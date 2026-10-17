@@ -187,6 +187,7 @@ fn structural_shared_infrastructure_is_direct_not_transitive() -> Result<(), Dia
         node("root", GraphNodeKind::TrustAnchor),
         node("shared-hsm", GraphNodeKind::Hsm),
         node("key-1", GraphNodeKind::Key),
+        node("key-2", GraphNodeKind::Key),
         node("vendor", GraphNodeKind::Vendor),
     ];
     let edges = vec![
@@ -199,6 +200,7 @@ fn structural_shared_infrastructure_is_direct_not_transitive() -> Result<(), Dia
         link("app-a", "shared-hsm", GraphRelation::UsesHsm),
         link("app-b", "shared-hsm", GraphRelation::UsesHsm),
         link("shared-hsm", "key-1", GraphRelation::HoldsKey),
+        link("shared-hsm", "key-2", GraphRelation::HoldsKey),
         link("shared-lib", "vendor", GraphRelation::SuppliedBy),
     ];
     let topology = DependencyAnalysis::analyze(&graph(nodes, edges)?, &Limits::default())?;
@@ -223,7 +225,19 @@ fn structural_shared_infrastructure_is_direct_not_transitive() -> Result<(), Dia
     }
     assert_eq!(by_target["vendor"].incoming_edge_count, 1);
     assert_eq!(by_target["key-1"].incoming_edge_count, 1);
+    assert_eq!(by_target["key-2"].incoming_edge_count, 1);
     assert!(!by_target.contains_key("app-a"));
+    let by_source: std::collections::BTreeMap<&str, _> = topology
+        .direct_outgoing_fanout()
+        .iter()
+        .map(|item| (item.source_node_id.as_str(), item))
+        .collect();
+    assert_eq!(by_source["shared-hsm"].source_kind, GraphNodeKind::Hsm);
+    assert_eq!(by_source["shared-hsm"].outgoing_edge_count, 2);
+    assert_eq!(by_source["shared-hsm"].distinct_target_count, 2);
+    assert_eq!(by_source["app-a"].outgoing_edge_count, 3);
+    assert_eq!(by_source["shared-lib"].outgoing_edge_count, 1);
+    assert_eq!(by_source["shared-hsm"].evidence_ids, ["ev-inferred"]);
     Ok(())
 }
 
