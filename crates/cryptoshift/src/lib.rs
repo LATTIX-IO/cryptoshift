@@ -32,6 +32,8 @@ mod inventory;
 mod inventory_codec;
 mod limits;
 mod topology;
+mod risk_model;
+mod risk_analysis;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
 pub use envelope::{
@@ -51,4 +53,12 @@ pub use graph::{EvidenceGraph, GraphEdge, GraphNode, GraphNodeKind, GraphRelatio
 pub use topology::{
     DependencyAnalysis, DependencyTopology, DirectFanout, DirectOutgoingFanout, MigrationUnit,
     PrerequisiteArc,
+};
+
+pub use risk_analysis::RiskAnalysis;
+pub use risk_model::{
+    ClaimOrigin, ContextAssessment, QuantumAssessment, QuantumPosture, RiskFactor,
+    RiskFactorKind, RiskFinding, RiskFindingCode, RiskLevel, RiskReport, RiskScore,
+    RiskUncertainty, ScoreProfile, UnitRiskVector, RISK_FACTOR_VERSION,
+    SCORE_PROFILE_VERSION,
 };
