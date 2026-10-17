@@ -97,9 +97,14 @@ radius, PQC eligibility, migration readiness, or a risk score from counts.
   20,000 admits a 10,000-node/9,999-edge path.
 - `max_export_bytes` bounds the **total UTF-8 bytes of emitted IDs and
   evidence references** in units, arcs, order and fanout. This is a
-  deliberately conservative logical payload estimate, not a byte-for-byte
-  encoded wire protocol or full allocator accounting. Object/container
-  allocations remain structurally bounded by validated graph cardinalities.
+  **pre-admission upper bound**, checked before adjacency indexes and
+  evidence sets are allocated. It conservatively charges system IDs up to
+  three times, potential condensation-arc unit IDs at the longest system-ID
+  length, and non-prerequisite edge evidence twice for separate incoming and
+  outgoing views. It can reject a graph whose heavily deduplicated result
+  would fit. This is not an encoded wire protocol or exact allocator
+  accounting; object/container allocations remain bounded by graph
+  cardinalities.
 - Checked arithmetic rejects overflow; any failure returns a typed
   `Diagnostic` and no partial topology. `prerequisite_chain` applies its
   own caller-supplied node/edge/work/output budgets.
