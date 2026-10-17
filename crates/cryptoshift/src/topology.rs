@@ -90,6 +90,7 @@ pub struct DirectOutgoingFanout {
 #[derive(Clone, Debug)]
 pub struct DependencyTopology {
     source_digest: SnapshotDigest,
+    graph_fingerprint: SnapshotDigest,
     units: Vec<MigrationUnit>,
     prerequisites: Vec<PrerequisiteArc>,
     dependency_first_order: Vec<String>,
@@ -420,6 +421,7 @@ impl DependencyAnalysis {
         }
         Ok(DependencyTopology {
             source_digest: graph.source_digest(),
+            graph_fingerprint: graph.fingerprint(),
             units,
             prerequisites,
             dependency_first_order,
@@ -489,6 +491,15 @@ impl DependencyTopology {
     #[must_use]
     pub const fn source_digest(&self) -> SnapshotDigest {
         self.source_digest
+    }
+
+    /// Exact canonical typed graph fingerprint used to construct this topology.
+    ///
+    /// Distinguishes different edge/node sets over an identical inventory.
+    /// The fingerprint is a content identity, not a source signature.
+    #[must_use]
+    pub const fn graph_fingerprint(&self) -> SnapshotDigest {
+        self.graph_fingerprint
     }
 
     /// Canonically sorted SCC-based system units, including isolated systems.
