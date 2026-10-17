@@ -66,6 +66,11 @@ impl RiskAnalysis {
             supplied_bytes = limits.checked_add(
                 ResourceKind::InputBytes,
                 supplied_bytes,
+                profile.algorithm_id.len(),
+            )?;
+            supplied_bytes = limits.checked_add(
+                ResourceKind::InputBytes,
+                supplied_bytes,
                 profile.source_reference.len(),
             )?;
         }
@@ -116,12 +121,22 @@ impl RiskAnalysis {
         let mut profiles = BTreeMap::<&str, &QuantumAssessment>::new();
         for profile in quantum {
             valid_ref(&profile.observation_id, "quantum_observation")?;
+            valid_ref(&profile.algorithm_id, "quantum_algorithm")?;
             valid_ref(&profile.source_reference, "quantum_reference")?;
-            if !observations.contains_key(profile.observation_id.as_str()) {
+            let observed = observations
+                .get(profile.observation_id.as_str())
+                .ok_or_else(|| {
+                    problem(
+                        DiagnosticCode::InvalidReference,
+                        "quantum_observation",
+                        "quantum classification must name an inventory observation",
+                    )
+                })?;
+            if profile.source_digest != digest || profile.algorithm_id != observed.algorithm_id {
                 return Err(problem(
-                    DiagnosticCode::InvalidReference,
-                    "quantum_observation",
-                    "quantum classification must name an inventory observation",
+                    DiagnosticCode::IntegrityMismatch,
+                    "quantum_classification",
+                    "classification must match source digest and exact algorithm identity",
                 ));
             }
             if profiles
@@ -139,6 +154,13 @@ impl RiskAnalysis {
         for claim in context {
             valid_ref(&claim.unit_id, "risk_unit")?;
             valid_ref(&claim.source_reference, "context_reference")?;
+            if claim.source_digest != digest {
+                return Err(problem(
+                    DiagnosticCode::IntegrityMismatch,
+                    "context_snapshot",
+                    "context assessment must match exact source digest",
+                ));
+            }
             if !units.contains(claim.unit_id.as_str()) {
                 return Err(problem(
                     DiagnosticCode::InvalidReference,
