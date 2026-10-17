@@ -326,7 +326,6 @@ fn uncertainty_survives_known_severe_exposure() -> Result<(), Diagnostic> {
     );
     Ok(())
 }
-
 #[test]
 fn incomplete_collection_and_scenario_assumptions_never_score() -> Result<(), Diagnostic> {
     let data = fixture(
@@ -582,8 +581,7 @@ fn invalid_profiles_and_tight_resource_budgets_fail_closed() -> Result<(), Diagn
 }
 
 #[test]
-fn external_source_text_is_bounded_before_building_assessment_indexes()
--> Result<(), Diagnostic> {
+fn external_source_text_is_bounded_before_building_assessment_indexes() -> Result<(), Diagnostic> {
     let data = fixture(
         false,
         CryptoUseKind::ActiveUse,
