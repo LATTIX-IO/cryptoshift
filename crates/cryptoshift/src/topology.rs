@@ -1,6 +1,6 @@
 //! Iterative, bounded topology analysis for the validated evidence graph.
 //!
-//! Only \`System -> System\` \`DependsOn\` edges become prerequisites.
+//! Only `System -> System` `DependsOn` edges become prerequisites.
 //! The output records structural facts and source evidence, **not** a safe or
 //! approved migration plan, risk score, or authenticated collector assertion.
 
@@ -14,7 +14,7 @@ use crate::{
 /// An indivisible planning candidate: a strongly connected group of systems.
 ///
 /// The stable ID is the lexicographically smallest system ID in this group.
-/// \`cyclic\` flags a group with multiple members or an explicit self-loop.
+/// `cyclic` flags a group with multiple members or an explicit self-loop.
 /// No property of this type asserts migration readiness.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MigrationUnit {
@@ -30,7 +30,7 @@ pub struct MigrationUnit {
 
 /// One typed condensation-DAG relationship.
 ///
-/// \`dependent_unit\` **depends on** \`prerequisite_unit\`. The prerequisite
+/// `dependent_unit` **depends on** `prerequisite_unit`. The prerequisite
 /// must therefore appear earlier in dependency-first order. Multiple graph
 /// edges between two units are aggregated with evidence deduplicated.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,7 +45,7 @@ pub struct PrerequisiteArc {
 
 /// Direct, nontransitive structural fan-in for one graph node.
 ///
-/// Counts include typed graph relations other than \`DependsOn\` only.
+/// Counts include typed graph relations other than `DependsOn` only.
 /// Different relations from the same source contribute separate direct edges,
 /// but the source counts only once. No criticality/safety is inferred.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -64,8 +64,8 @@ pub struct DirectFanout {
 
 /// Canonical, read-only dependency and infrastructure topology.
 ///
-/// SCC analysis includes every \`System\` node, even an isolated system.
-/// An edge \`A DependsOn B\` is stored as \`A -> B\` but scheduled \`B, A\`.
+/// SCC analysis includes every `System` node, even an isolated system.
+/// An edge `A DependsOn B` is stored as `A -> B` but scheduled `B, A`.
 /// Other relation kinds remain independent direct structural fan-in.
 /// Neither cycle collapsing nor ordering implies operational authorization.
 #[derive(Clone, Debug)]
@@ -84,7 +84,7 @@ impl DependencyAnalysis {
     /// Analyze a graph without recursion, external reads, or mutation.
     ///
     /// Uses iterative Kosaraju SCCs, sorted condensation edges and Kahn's
-    /// dependency-first traversal. All outputs are constrained by \`Limits\`;
+    /// dependency-first traversal. All outputs are constrained by `Limits`;
     /// partial results are never returned on budget exhaustion.
     pub fn analyze(
         graph: &EvidenceGraph,
