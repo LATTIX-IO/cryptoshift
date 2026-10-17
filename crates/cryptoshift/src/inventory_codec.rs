@@ -218,11 +218,9 @@ impl<'a> Reader<'a> {
     /// before reading or allocating the next collection of untrusted records.
     fn evidence_count(&mut self) -> Result<usize, Diagnostic> {
         let count = self.count(ResourceKind::EvidenceRecords)?;
-        self.evidence_records = self.limits.checked_add(
-            ResourceKind::EvidenceRecords,
-            self.evidence_records,
-            count,
-        )?;
+        self.evidence_records =
+            self.limits
+                .checked_add(ResourceKind::EvidenceRecords, self.evidence_records, count)?;
         Ok(count)
     }
 
@@ -391,7 +389,8 @@ mod tests {
     }
 
     #[test]
-    fn cumulative_evidence_budget_rejects_third_collection_before_allocation() -> Result<(), Diagnostic> {
+    fn cumulative_evidence_budget_rejects_third_collection_before_allocation()
+    -> Result<(), Diagnostic> {
         let limits = Limits {
             max_evidence_records: 2,
             ..Limits::default()
