@@ -149,7 +149,7 @@ supported.
 | --- | --- |
 | All 18 exact parameter sets/roles/categories; no ambiguous alias | catalog_enumerates_exact_fips_identifiers_and_categories |
 | Unsupported source revision or v2 schema must be rejected | historic_edition_identifiers_are_pinned_and_future_versions_rejected |
-| Canonical ordering, unknown=NotSpecified, frozen digest replay | canonical_reordering_and_explicit_target_lookup |
+| Canonical ordering, unlisted known=NotSpecified, unknown ID rejected, frozen digest replay | canonical_reordering_and_explicit_target_lookup |
 | Content identity changes with revision, source, scope, category | immutable_revision_and_provenance_changes_rotate_content_identity |
 | No role/category downgrade or undeclared source | role_and_category_constraints_are_not_silently_relaxed |
 | Reject contradictory, duplicate or forbidden references | duplicate_and_conflicting_requirements_fail_closed |
