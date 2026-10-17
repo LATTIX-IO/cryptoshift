@@ -295,6 +295,7 @@ impl CapabilityCatalog {
         limits: &Limits,
     ) -> Result<CapabilityMatch, Diagnostic> {
         limits.validate()?;
+        let mut supplied_bytes = 0_usize;
         for field in [
             selector.scope_id,
             selector.provider_id,
@@ -303,9 +304,11 @@ impl CapabilityCatalog {
             selector.platform_id,
         ] {
             valid_id(field, "capability_lookup")?;
+            charge(limits, ResourceKind::InputBytes, &mut supplied_bytes, field)?;
         }
         if let Some(runtime) = selector.runtime_id {
             valid_id(runtime, "capability_runtime")?;
+            charge(limits, ResourceKind::InputBytes, &mut supplied_bytes, runtime)?;
         }
         if selector.scope_id != self.content.scope_id
             || selector.scope_id != target.content().scope_id
@@ -325,6 +328,7 @@ impl CapabilityCatalog {
         }
         let disposition = target.disposition(selector.algorithm.id())?;
         limits.check(ResourceKind::EvidenceRecords, self.content.records.len())?;
+        limits.check(ResourceKind::ProfileReferences, self.content.records.len())?;
         let mut records = Vec::new();
         let mut evidence = BTreeSet::new();
         let mut statuses = BTreeSet::new();
@@ -549,7 +553,7 @@ fn valid_id(value: &str, field: &'static str) -> Result<(), Diagnostic> {
         return Err(error(
             DiagnosticCode::InvalidIdentifier,
             field,
-            "capability identifiers must be nonsecret printable opaque references",
+            "capability identifiers must be opaque printable ASCII references",
         ));
     }
     Ok(())
