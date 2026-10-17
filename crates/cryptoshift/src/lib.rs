@@ -25,6 +25,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod capability;
 mod diagnostic;
 mod envelope;
 mod graph;
@@ -71,4 +72,10 @@ pub use target::{
     AlgorithmConstraint, CertificateConstraint, Cnsa20Overlay, ConstraintDisposition,
     ExplicitDeadline, HybridConstruction, ProfileProvenance, ProtocolConstraint,
     TARGET_PROFILE_VERSION, TargetDisposition, TargetProfile, TargetProfileDraft,
+};
+
+pub use capability::{
+    CAPABILITY_CATALOG_VERSION, CapabilityCatalog, CapabilityCatalogDraft, CapabilityEvidence,
+    CapabilityEvidenceBasis, CapabilityEvidenceRef, CapabilityMatch, CapabilityMatchState,
+    CapabilityRecord, CapabilitySelector, CapabilityState, EvidenceVerification,
 };
