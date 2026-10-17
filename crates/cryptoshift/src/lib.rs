@@ -27,6 +27,7 @@
 
 mod diagnostic;
 mod envelope;
+mod graph;
 mod inventory;
 mod inventory_codec;
 mod limits;
@@ -43,3 +44,5 @@ pub use inventory::{
     InventoryArtifact, InventorySnapshot, NORMALIZATION_VERSION, SnapshotDigest,
     ValidatedInventorySnapshot,
 };
+
+pub use graph::{EvidenceGraph, GraphEdge, GraphNode, GraphNodeKind, GraphRelation};
