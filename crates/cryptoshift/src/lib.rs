@@ -34,6 +34,8 @@ mod limits;
 mod risk_analysis;
 mod risk_model;
 mod topology;
+mod standards;
+mod target;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
 pub use envelope::{
@@ -60,4 +62,13 @@ pub use risk_model::{
     ClaimOrigin, ContextAssessment, QuantumAssessment, QuantumPosture, RISK_FACTOR_VERSION,
     RiskFactor, RiskFactorKind, RiskFinding, RiskFindingCode, RiskLevel, RiskReport, RiskScore,
     RiskUncertainty, SCORE_PROFILE_VERSION, ScoreProfile, UnitRiskVector,
+};
+
+pub use standards::{
+    AlgorithmRole, KnownAlgorithm, SecurityCategory, StandardEdition, STANDARDS_CATALOG_VERSION,
+};
+pub use target::{
+    AlgorithmConstraint, CertificateConstraint, Cnsa20Overlay, ConstraintDisposition,
+    ExplicitDeadline, HybridConstruction, ProfileProvenance, ProtocolConstraint,
+    TARGET_PROFILE_VERSION, TargetDisposition, TargetProfile, TargetProfileDraft,
 };
