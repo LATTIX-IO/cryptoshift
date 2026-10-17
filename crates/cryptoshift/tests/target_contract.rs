@@ -292,11 +292,11 @@ fn duplicate_and_conflicting_requirements_fail_closed() {
         .retain(|a| a.algorithm != KnownAlgorithm::MlKem1024);
     assert_eq!(code(check(d)), Some(DiagnosticCode::InvalidStateTransition));
     let mut d = draft();
-    d.algorithms
-        .iter_mut()
-        .find(|a| a.algorithm == KnownAlgorithm::MlDsa87)
-        .expect("test fixture contains signature")
-        .disposition = ConstraintDisposition::Forbidden;
+    for entry in &mut d.algorithms {
+        if entry.algorithm == KnownAlgorithm::MlDsa87 {
+            entry.disposition = ConstraintDisposition::Forbidden;
+        }
+    }
     assert_eq!(code(check(d)), Some(DiagnosticCode::InvalidStateTransition));
     let mut d = draft();
     d.protocols.push(d.protocols[0].clone());
@@ -425,9 +425,14 @@ fn external_metadata_and_resource_budgets_reject_without_leaking_strings() -> Re
 {
     let mut bad = draft();
     bad.provenance.issuer_id = "secret\nunsafe".into();
-    let err = check(bad).expect_err("newline-bearing issuer must be rejected");
-    assert_eq!(err.code, DiagnosticCode::InvalidIdentifier);
-    assert!(!err.to_string().contains("secret"));
+    let outcome = check(bad);
+    assert_eq!(
+        outcome.as_ref().err().map(|e| e.code),
+        Some(DiagnosticCode::InvalidIdentifier)
+    );
+    if let Err(err) = outcome {
+        assert!(!err.to_string().contains("secret"));
+    }
     let mut too_many = draft();
     too_many.algorithms.extend(
         KnownAlgorithm::ALL
