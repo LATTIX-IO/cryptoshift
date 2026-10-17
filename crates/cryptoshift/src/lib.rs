@@ -33,9 +33,9 @@ mod inventory_codec;
 mod limits;
 mod risk_analysis;
 mod risk_model;
-mod topology;
 mod standards;
 mod target;
+mod topology;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
 pub use envelope::{
@@ -65,7 +65,7 @@ pub use risk_model::{
 };
 
 pub use standards::{
-    AlgorithmRole, KnownAlgorithm, SecurityCategory, StandardEdition, STANDARDS_CATALOG_VERSION,
+    AlgorithmRole, KnownAlgorithm, STANDARDS_CATALOG_VERSION, SecurityCategory, StandardEdition,
 };
 pub use target::{
     AlgorithmConstraint, CertificateConstraint, Cnsa20Overlay, ConstraintDisposition,

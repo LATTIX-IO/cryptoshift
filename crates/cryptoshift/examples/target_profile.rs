@@ -3,8 +3,8 @@
 use cryptoshift::{
     AlgorithmConstraint, AlgorithmRole, CertificateConstraint, Cnsa20Overlay,
     ConstraintDisposition, Diagnostic, KnownAlgorithm, Limits, ProfileProvenance,
-    ProtocolConstraint, SecurityCategory, StandardEdition, TargetDisposition,
-    TargetProfile, TargetProfileDraft, TARGET_PROFILE_VERSION,
+    ProtocolConstraint, SecurityCategory, StandardEdition, TARGET_PROFILE_VERSION,
+    TargetDisposition, TargetProfile, TargetProfileDraft,
 };
 
 fn main() -> Result<(), Diagnostic> {
@@ -66,14 +66,8 @@ fn main() -> Result<(), Diagnostic> {
     println!("source scope: {}", profile.content().scope_id);
     println!("digest: {}", profile.digest().as_identifier());
     println!("standards: {}", profile.content().standards.len());
-    println!(
-        "ML-KEM-1024: {:?}",
-        profile.disposition("ML-KEM-1024")?
-    );
-    println!(
-        "ML-DSA-87: {:?}",
-        profile.disposition("ML-DSA-87")?
-    );
+    println!("ML-KEM-1024: {:?}", profile.disposition("ML-KEM-1024")?);
+    println!("ML-DSA-87: {:?}", profile.disposition("ML-DSA-87")?);
     assert_eq!(
         profile.disposition("ML-KEM-1024")?,
         TargetDisposition::Required

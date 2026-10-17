@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use sha2::{Digest, Sha256};
 
 use crate::standards::{
-    AlgorithmRole, KnownAlgorithm, SecurityCategory, StandardEdition, STANDARDS_CATALOG_VERSION,
+    AlgorithmRole, KnownAlgorithm, STANDARDS_CATALOG_VERSION, SecurityCategory, StandardEdition,
 };
 use crate::{Diagnostic, DiagnosticCode, Limits, ResourceKind, SnapshotDigest};
 
@@ -202,9 +202,7 @@ impl TargetProfile {
         ] {
             valid_id(value, "target_identity")?;
         }
-        if let (Some(now), Some(expiry)) =
-            (evaluation_time_unix_secs, draft.expires_at_unix_secs)
-        {
+        if let (Some(now), Some(expiry)) = (evaluation_time_unix_secs, draft.expires_at_unix_secs) {
             if now >= expiry {
                 return Err(error(
                     DiagnosticCode::StaleCriticalProfile,
@@ -319,12 +317,11 @@ impl TargetProfile {
                 "certificate_signature",
             )?;
         }
-        draft.certificates.sort_by(|a, b| {
-            (&a.profile_id, &a.revision).cmp(&(&b.profile_id, &b.revision))
-        });
+        draft
+            .certificates
+            .sort_by(|a, b| (&a.profile_id, &a.revision).cmp(&(&b.profile_id, &b.revision)));
         if draft.certificates.windows(2).any(|items| {
-            (&items[0].profile_id, &items[0].revision)
-                == (&items[1].profile_id, &items[1].revision)
+            (&items[0].profile_id, &items[0].revision) == (&items[1].profile_id, &items[1].revision)
         }) {
             return Err(duplicate("certificate_profile"));
         }
@@ -352,9 +349,7 @@ impl TargetProfile {
             // An application-specific hybrid/protocol decision cannot be
             // inferred from an NSA general-purpose algorithm allowlist.
         }
-        if draft.cnsa20.is_none()
-            && draft.standards.contains(&StandardEdition::Cnsa20_2022v1)
-        {
+        if draft.cnsa20.is_none() && draft.standards.contains(&StandardEdition::Cnsa20_2022v1) {
             return Err(error(
                 DiagnosticCode::InvalidStateTransition,
                 "cnsa_applicability",
@@ -549,11 +544,9 @@ struct Writer<'a> {
 
 impl Writer<'_> {
     fn put(&mut self, data: &[u8]) -> Result<(), Diagnostic> {
-        let next = self.limits.checked_add(
-            ResourceKind::ExportBytes,
-            self.bytes.len(),
-            data.len(),
-        )?;
+        let next =
+            self.limits
+                .checked_add(ResourceKind::ExportBytes, self.bytes.len(), data.len())?;
         self.bytes.reserve(next - self.bytes.len());
         self.bytes.extend_from_slice(data);
         Ok(())
