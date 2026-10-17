@@ -126,6 +126,14 @@ def check_repository(root: Path, *, verify_cargo_metadata: bool = False) -> list
             issues.append("Release workflow must only prepare release PRs; no release job")
         if not re.search(r"(?m)^\s*command:\s*release-pr\s*$", release):
             issues.append("Manual release-pr command must be preserved")
+        release_action = named_step(job_lines(release, "release-plz-pr"), "Prepare release PR (never publish)")
+        action_lines = [
+            line.split(" #", 1)[0].strip()
+            for line in release_action
+            if not line.lstrip().startswith("#")
+        ]
+        if "uses: release-plz/action@8921286633dfa0c4020f7f30bd1c14fe19cbb10e" not in action_lines:
+            issues.append("Release-plz action must use the reviewed pinned SHA")
         if not re.search(r"release-plz/action@[a-f0-9]{40}\b", release):
             issues.append("Release-plz action must be pinned to a commit SHA")
         release_job = job_lines(release, "release-plz-pr")
