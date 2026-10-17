@@ -43,6 +43,7 @@ fn main() -> Result<(), Diagnostic> {
         },
         &limits,
     )?;
+    let source_digest = inventory.export(&limits)?.digest;
     let graph = EvidenceGraph::new(
         &inventory,
         vec![
@@ -74,7 +75,9 @@ fn main() -> Result<(), Diagnostic> {
     // This source assertion is explicit; the library never guesses the
     // quantum security of an algorithm solely from the text of its name.
     let profile = [QuantumAssessment {
+        source_digest,
         observation_id: "rsa-observation".into(),
+        algorithm_id: "RSA-2048".into(),
         posture: QuantumPosture::Susceptible,
         origin: ClaimOrigin::AnalystAssessment,
         source_reference: "synthetic-algorithm-review".into(),
@@ -84,6 +87,7 @@ fn main() -> Result<(), Diagnostic> {
         .copied()
         .filter(|kind| kind.requires_context())
         .map(|kind| ContextAssessment {
+            source_digest,
             unit_id: "frontend".into(),
             factor: kind,
             level: RiskLevel::Moderate,
