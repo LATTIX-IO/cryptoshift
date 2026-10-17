@@ -91,7 +91,9 @@ CapabilityMatchState:
   the explicitly supplied query time; no current state is asserted.
 
 A match retains source catalog digest, immutable target digest, exact target
-disposition, canonical record IDs and canonical source evidence IDs. A
+disposition, canonical record IDs and canonical **source/evidence/revision**
+triples. Evidence IDs may collide across independent source namespaces, so
+a raw evidence ID alone is never treated as a unique global provenance key. A
 Forbidden target still reports facts **without permitting use**.
 
 ## Versioning, serialization and denial behavior
@@ -113,7 +115,8 @@ Forbidden target still reports facts **without permitting use**.
   authenticity and trusted expected digest before passing a draft.
 - Limits::EvidenceRecords and ProfileReferences bound catalog record count,
   InputBytes bounds the cumulative input strings **before sort/copy/indexing**,
-  ExportBytes bounds canonical serialization and emitted lookup references.
+  ExportBytes bounds canonical serialization and emitted source/evidence/revision
+  lookup references before result allocation.
   Arithmetic overflow and exhaustion fail closed with redacted Diagnostic.
 - If source expiry is present, an evaluation timestamp is mandatory and
   expired source data is rejected. Query time is mandatory and **rechecks**
@@ -133,6 +136,7 @@ Forbidden target still reports facts **without permitting use**.
 | Exact provider/version/platform/scope/role match without fallback | incompatible_version_platform_provider_scope_and_role_never_inherit_claims |
 | Roadmap, Preview, Unsupported, Unknown, NoEvidence and Forbidden separate | roadmap_preview_unsupported_unknown_and_missing_are_distinct |
 | Preserve independent contradictory evidence and stable source IDs | disagreeing_sources_are_preserved_not_overwritten |
+| Identical evidence IDs from independent sources remain distinct | independent_evidence_namespaces_survive_equal_evidence_ids |
 | Reject absent verification, missing proof, inference and missing runtime | verified_deployment_claim_requires_runtime_and_checked_evidence |
 | Explicit-time expiry, historical replay, future-source denial | explicit_clock_blocks_stale_future_and_unbounded_runtime_claims |
 | Target profile expiry rechecked at lookup time | target_expiry_is_rechecked_at_lookup_without_a_clock_default |

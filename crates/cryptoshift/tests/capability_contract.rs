@@ -210,7 +210,10 @@ fn advertised_capability_is_neither_deployed_nor_negotiated() -> Result<(), Diag
         CapabilityMatchState::Consistent(CapabilityState::DeployedAndVerified)
     );
     assert_eq!(runtime.record_ids, ["runtime-proof"]);
-    assert_eq!(runtime.evidence_ids, ["test-run-472"]);
+    assert_eq!(runtime.evidence_refs.len(), 1);
+    assert_eq!(runtime.evidence_refs[0].source_id, "external-validation-team");
+    assert_eq!(runtime.evidence_refs[0].evidence_id, "test-run-472");
+    assert_eq!(runtime.evidence_refs[0].source_revision, "runtime-check-r1");
     assert_eq!(runtime.catalog_digest, catalog.digest());
     assert_eq!(runtime.target_digest, target.digest());
     // The separately advertised product cannot satisfy a runtime lookup.
@@ -319,7 +322,14 @@ fn disagreeing_sources_are_preserved_not_overwritten() -> Result<(), Diagnostic>
     let result = a.match_target(&t, select(None), 50, &Limits::default())?;
     assert_eq!(result.state, CapabilityMatchState::Conflicting);
     assert_eq!(result.record_ids, ["v1", "v2"]);
-    assert_eq!(result.evidence_ids, ["evidence-v1", "evidence-v2"]);
+    assert_eq!(
+        result
+            .evidence_refs
+            .iter()
+            .map(|item| item.evidence_id.as_str())
+            .collect::<Vec<_>>(),
+        ["evidence-v1", "evidence-v2"]
+    );
     let same = build(vec![
         vendor("v1", CapabilityState::Available),
         vendor("v2", CapabilityState::Available),
@@ -330,6 +340,32 @@ fn disagreeing_sources_are_preserved_not_overwritten() -> Result<(), Diagnostic>
         CapabilityMatchState::Consistent(CapabilityState::Available)
     );
     assert_ne!(a.digest(), same.digest());
+    Ok(())
+}
+
+#[test]
+fn independent_evidence_namespaces_survive_equal_evidence_ids() -> Result<(), Diagnostic> {
+    let target = target("tenant-alpha", ConstraintDisposition::Required)?;
+    let a = vendor("claim-a", CapabilityState::Available);
+    let mut b = vendor("claim-b", CapabilityState::Available);
+    b.evidence.source_id = "separate-independent-source".into();
+    b.evidence.evidence_id = a.evidence.evidence_id.clone();
+    b.evidence.source_revision = "review-v2".into();
+    let catalog = build(vec![b, a])?;
+    let found = catalog.match_target(&target, select(None), 50, &Limits::default())?;
+    assert_eq!(
+        found.state,
+        CapabilityMatchState::Consistent(CapabilityState::Available)
+    );
+    assert_eq!(found.record_ids, ["claim-a", "claim-b"]);
+    assert_eq!(found.evidence_refs.len(), 2);
+    assert_eq!(found.evidence_refs[0].source_id, "separate-independent-source");
+    assert_eq!(found.evidence_refs[1].source_id, "vendor-documentation");
+    assert_eq!(found.evidence_refs[0].evidence_id, found.evidence_refs[1].evidence_id);
+    assert_ne!(
+        found.evidence_refs[0].source_revision,
+        found.evidence_refs[1].source_revision
+    );
     Ok(())
 }
 

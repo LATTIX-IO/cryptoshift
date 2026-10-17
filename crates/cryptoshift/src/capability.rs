@@ -171,6 +171,20 @@ pub enum CapabilityMatchState {
     Stale,
 }
 
+/// Original source attribution for one matched evidence reference.
+///
+/// The evidence ID is only meaningful together with its independent source
+/// and declared source revision. This does not authenticate the source.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CapabilityEvidenceRef {
+    /// The provider/reviewer that asserted the evidence.
+    pub source_id: String,
+    /// Identifier within the reporting source's evidence namespace.
+    pub evidence_id: String,
+    /// Exact published/tested source revision or report edition.
+    pub source_revision: String,
+}
+
 /// Read-only exact-match result. Never an authorization or compatibility proof.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapabilityMatch {
@@ -184,8 +198,9 @@ pub struct CapabilityMatch {
     pub state: CapabilityMatchState,
     /// Sorted matched record IDs, including contradictions and stale claims.
     pub record_ids: Vec<String>,
-    /// Sorted references to all matched original source evidence records.
-    pub evidence_ids: Vec<String>,
+    /// Sorted, unambiguous source+evidence+revision references. Independent
+    /// source namespaces are never coalesced by their opaque evidence IDs.
+    pub evidence_refs: Vec<CapabilityEvidenceRef>,
 }
 
 impl CapabilityCatalog {
@@ -371,14 +386,19 @@ impl CapabilityCatalog {
                 &mut bytes,
                 &claim.record_id,
             )?;
-            charge(
-                limits,
-                ResourceKind::ExportBytes,
-                &mut bytes,
+            for reference in [
+                &claim.evidence.source_id,
                 &claim.evidence.evidence_id,
-            )?;
+                &claim.evidence.source_revision,
+            ] {
+                charge(limits, ResourceKind::ExportBytes, &mut bytes, reference)?;
+            }
             records.push(claim.record_id.clone());
-            evidence.insert(claim.evidence.evidence_id.as_str());
+            evidence.insert(CapabilityEvidenceRef {
+                source_id: claim.evidence.source_id.clone(),
+                evidence_id: claim.evidence.evidence_id.clone(),
+                source_revision: claim.evidence.source_revision.clone(),
+            });
             statuses.insert(claim.state);
             stale |= evaluation_time_unix_secs < claim.evidence.observed_at_unix_secs
                 || claim
@@ -397,19 +417,16 @@ impl CapabilityCatalog {
         } else {
             CapabilityMatchState::NoEvidence
         };
-        let mut evidence_ids = Vec::with_capacity(evidence.len());
-        for id in evidence {
-            // Only the unique references are emitted; conservative earlier
-            // per-record charging ensures this allocation stays bounded.
-            evidence_ids.push(id.to_owned());
-        }
+        // The caller's output byte limit was charged above for each entire
+        // source triple before these unique references are materialized.
+        let evidence_refs = evidence.into_iter().collect();
         Ok(CapabilityMatch {
             catalog_digest: self.digest,
             target_digest: target.digest(),
-            target_disposition: disposition,
             state,
+            target_disposition: disposition,
             record_ids: records,
-            evidence_ids,
+            evidence_refs,
         })
     }
 }
