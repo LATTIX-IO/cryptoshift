@@ -210,7 +210,7 @@ fn structural_shared_infrastructure_is_direct_not_transitive() -> Result<(), Dia
         .map(|item| (item.target_node_id.as_str(), item))
         .collect();
     for id in ["shared-lib", "root", "shared-hsm"] {
-        let item = by_target.get(id).ok_or_else(|| Diagnostic {
+        let item = by_target.get(id).ok_or(Diagnostic {
             code: DiagnosticCode::InvalidReference,
             subject: "test_target",
             reason: "expected structural target missing",
