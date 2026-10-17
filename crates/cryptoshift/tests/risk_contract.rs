@@ -7,7 +7,7 @@ use cryptoshift::{
     GraphNodeKind, GraphRelation, IDENTITY_VERSION, InventorySnapshot, Limits,
     NORMALIZATION_VERSION, QuantumAssessment, QuantumPosture, RiskAnalysis, RiskFactor,
     RiskFactorKind, RiskFindingCode, RiskLevel, RiskReport, RiskUncertainty, SCORE_PROFILE_VERSION,
-    ScoreProfile, ValidatedInventorySnapshot,
+    ScoreProfile, SnapshotDigest, ValidatedInventorySnapshot,
 };
 
 fn fixture(
@@ -90,12 +90,13 @@ fn fixture(
     Ok((inventory, graph, topology))
 }
 
-fn complete_context(origin: ClaimOrigin) -> Vec<ContextAssessment> {
+fn complete_context(origin: ClaimOrigin, source_digest: SnapshotDigest) -> Vec<ContextAssessment> {
     RiskFactorKind::ALL
         .iter()
         .copied()
         .filter(|kind| kind.requires_context())
         .map(|factor| ContextAssessment {
+            source_digest,
             unit_id: "app".into(),
             factor,
             level: RiskLevel::Moderate,
@@ -105,13 +106,23 @@ fn complete_context(origin: ClaimOrigin) -> Vec<ContextAssessment> {
         .collect()
 }
 
-fn classification(origin: ClaimOrigin, posture: QuantumPosture) -> QuantumAssessment {
+fn classification(
+    origin: ClaimOrigin,
+    posture: QuantumPosture,
+    source_digest: SnapshotDigest,
+) -> QuantumAssessment {
     QuantumAssessment {
+        source_digest,
         observation_id: "obs-1".into(),
+        algorithm_id: "RSA-2048".into(),
         posture,
         origin,
         source_reference: "quantum-assessment-r1".into(),
     }
+}
+
+fn digest(inventory: &ValidatedInventorySnapshot) -> Result<SnapshotDigest, Diagnostic> {
+    Ok(inventory.export(&Limits::default())?.digest)
 }
 
 fn score_profile() -> Result<ScoreProfile, Diagnostic> {
@@ -188,11 +199,8 @@ fn fully_attributed_inputs_yield_inspectable_versioned_score() -> Result<(), Dia
         ConflictState::Uncontested,
         EvidenceBasis::Direct,
     )?;
-    let quantum = [classification(
-        ClaimOrigin::AnalystAssessment,
-        QuantumPosture::Susceptible,
-    )];
-    let mut context = complete_context(ClaimOrigin::AnalystAssessment);
+    let quantum = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?)];
+    let mut context = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     let profile = score_profile()?;
     let baseline = assess(
         &data,
@@ -263,11 +271,8 @@ fn configured_or_library_capability_never_becomes_active_use() -> Result<(), Dia
             ConflictState::Uncontested,
             EvidenceBasis::Direct,
         )?;
-        let profiles = [classification(
-            ClaimOrigin::AnalystAssessment,
-            QuantumPosture::Susceptible,
-        )];
-        let context = complete_context(ClaimOrigin::AnalystAssessment);
+        let profiles = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?)];
+        let context = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
         let report = assess(
             &data,
             &profiles,
@@ -299,11 +304,8 @@ fn uncertainty_survives_known_severe_exposure() -> Result<(), Diagnostic> {
         ConflictState::Conflicted,
         EvidenceBasis::Inferred,
     )?;
-    let profile = [classification(
-        ClaimOrigin::AnalystAssessment,
-        QuantumPosture::Susceptible,
-    )];
-    let context = complete_context(ClaimOrigin::AnalystAssessment);
+    let profile = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?)];
+    let context = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     let report = assess(
         &data,
         &profile,
@@ -334,11 +336,8 @@ fn incomplete_collection_and_scenario_assumptions_never_score() -> Result<(), Di
         ConflictState::Uncontested,
         EvidenceBasis::Direct,
     )?;
-    let context = complete_context(ClaimOrigin::ScenarioAssumption);
-    let profile = [classification(
-        ClaimOrigin::ScenarioAssumption,
-        QuantumPosture::CandidateResistant,
-    )];
+    let context = complete_context(ClaimOrigin::ScenarioAssumption, digest(&data.0)?);
+    let profile = [classification(ClaimOrigin::ScenarioAssumption, QuantumPosture::CandidateResistant, digest(&data.0)?)];
     let report = assess(
         &data,
         &profile,
@@ -409,14 +408,11 @@ fn missing_second_profile_cannot_be_masked_by_a_known_severe_use() -> Result<(),
     let bound = EvidenceGraph::new(&snapshot, nodes, edges, &Limits::default())?;
     let topology = DependencyAnalysis::analyze(&bound, &Limits::default())?;
     let input = (snapshot, bound, topology);
-    let profile = [classification(
-        ClaimOrigin::AnalystAssessment,
-        QuantumPosture::Susceptible,
-    )];
+    let profile = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&input.0)?)];
     let report = assess(
         &input,
         &profile,
-        &complete_context(ClaimOrigin::AnalystAssessment),
+        &complete_context(ClaimOrigin::AnalystAssessment, digest(&input.0)?),
         Some(&score_profile()?),
         &Limits::default(),
     )?;
@@ -438,7 +434,7 @@ fn invalid_sources_duplicates_and_derived_factor_overrides_rejected() -> Result<
         ConflictState::Uncontested,
         EvidenceBasis::Direct,
     )?;
-    let p = classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible);
+    let p = classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?);
     let check = |q: Vec<QuantumAssessment>, c: Vec<ContextAssessment>| {
         assess(&data, &q, &c, None, &Limits::default())
             .err()
@@ -460,19 +456,19 @@ fn invalid_sources_duplicates_and_derived_factor_overrides_rejected() -> Result<
         check(vec![bad_ref], vec![]),
         Some(DiagnosticCode::InvalidIdentifier)
     );
-    let mut claims = complete_context(ClaimOrigin::AnalystAssessment);
+    let mut claims = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     claims.push(claims[0].clone());
     assert_eq!(
         check(vec![p.clone()], claims),
         Some(DiagnosticCode::DuplicateRecord)
     );
-    let mut override_factor = complete_context(ClaimOrigin::AnalystAssessment);
+    let mut override_factor = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     override_factor[0].factor = RiskFactorKind::QuantumExposure;
     assert_eq!(
         check(vec![p.clone()], override_factor),
         Some(DiagnosticCode::InvalidStateTransition)
     );
-    let mut wrong_unit = complete_context(ClaimOrigin::AnalystAssessment);
+    let mut wrong_unit = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     wrong_unit[0].unit_id = "other-tenant-unit".into();
     assert_eq!(
         check(vec![p], wrong_unit),
@@ -537,11 +533,8 @@ fn invalid_profiles_and_tight_resource_budgets_fail_closed() -> Result<(), Diagn
         ConflictState::Uncontested,
         EvidenceBasis::Direct,
     )?;
-    let contexts = complete_context(ClaimOrigin::AnalystAssessment);
-    let profiles = [classification(
-        ClaimOrigin::AnalystAssessment,
-        QuantumPosture::Susceptible,
-    )];
+    let contexts = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
+    let profiles = [classification(ClaimOrigin::AnalystAssessment, QuantumPosture::Susceptible, digest(&data.0)?)];
     let cases = [
         Limits {
             max_planner_candidates: 9,
@@ -588,7 +581,7 @@ fn external_source_text_is_bounded_before_building_assessment_indexes() -> Resul
         ConflictState::Uncontested,
         EvidenceBasis::Direct,
     )?;
-    let mut claims = complete_context(ClaimOrigin::AnalystAssessment);
+    let mut claims = complete_context(ClaimOrigin::AnalystAssessment, digest(&data.0)?);
     for claim in &mut claims {
         claim.source_reference = format!("reference-{}", "x".repeat(180));
     }
