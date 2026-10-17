@@ -408,6 +408,31 @@ fn explicit_clock_blocks_stale_future_and_unbounded_runtime_claims() -> Result<(
 }
 
 #[test]
+fn target_expiry_is_rechecked_at_lookup_without_a_clock_default() -> Result<(), Diagnostic> {
+    let mut input = target("tenant-alpha", ConstraintDisposition::Required)?
+        .content()
+        .clone();
+    input.expires_at_unix_secs = Some(100);
+    let time_bound_target = TargetProfile::new(input, &Limits::default(), Some(50))?;
+    let catalog = build(vec![deployed()])?;
+    let selector = select(Some("pod-image-sha256-abc"));
+    assert_eq!(
+        catalog
+            .match_target(&time_bound_target, selector, 99, &Limits::default())?
+            .state,
+        CapabilityMatchState::Consistent(CapabilityState::DeployedAndVerified)
+    );
+    let rejected = catalog.match_target(&time_bound_target, selector, 100, &Limits::default());
+    assert_eq!(
+        rejected.err().map(|e| e.code),
+        Some(DiagnosticCode::StaleCriticalProfile)
+    );
+    // A time-independent target without an expiry is still evaluated with
+    // an explicit query time; runtime evidence expiry remains independent.
+    Ok(())
+}
+
+#[test]
 fn duplicate_records_revisions_and_secret_bearing_identifiers_fail_closed() -> Result<(), Diagnostic>
 {
     let a = vendor("same-id", CapabilityState::Available);

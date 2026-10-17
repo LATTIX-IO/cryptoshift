@@ -113,7 +113,9 @@ Forbidden target still reports facts **without permitting use**.
   Arithmetic overflow and exhaustion fail closed with redacted Diagnostic.
 - If source expiry is present, an evaluation timestamp is mandatory and
   expired source data is rejected. Query time is mandatory and **rechecks**
-  validity, so a once-valid runtime claim cannot remain current indefinitely.
+  both capability evidence expiry and the target profile's own expiry, so
+  neither a once-valid runtime claim nor an expired desired-state policy is
+  silently treated as current.
 - No implicit freshness defaults, global deadlines, assumed platform
   compatibility, hybrid/PQC handshake, or namespace merging.
 
@@ -128,6 +130,7 @@ Forbidden target still reports facts **without permitting use**.
 | Preserve independent contradictory evidence and stable source IDs | disagreeing_sources_are_preserved_not_overwritten |
 | Reject absent verification, missing proof, inference and missing runtime | verified_deployment_claim_requires_runtime_and_checked_evidence |
 | Explicit-time expiry, historical replay, future-source denial | explicit_clock_blocks_stale_future_and_unbounded_runtime_claims |
+| Target profile expiry rechecked at lookup time | target_expiry_is_rechecked_at_lookup_without_a_clock_default |
 | Duplicate evidence identities, invalid/secret-bearing IDs, unknown algorithm, schema | duplicate_records_revisions_and_secret_bearing_identifiers_fail_closed |
 | Resource exhaustion denies without partial result | bounded_input_record_count_output_and_lookup_fail_closed |
 

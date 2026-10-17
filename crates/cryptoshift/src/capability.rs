@@ -331,6 +331,20 @@ impl CapabilityCatalog {
                 "requested cryptographic role mismatches the exact parameter set",
             ));
         }
+        // TargetProfile validates expiry at creation, but a profile can
+        // become stale later. Never evaluate capability claims against an
+        // expired target merely because the target was once admitted.
+        if target
+            .content()
+            .expires_at_unix_secs
+            .is_some_and(|expiry| evaluation_time_unix_secs >= expiry)
+        {
+            return Err(error(
+                DiagnosticCode::StaleCriticalProfile,
+                "capability_target_expiry",
+                "target profile has expired at the explicit evaluation time",
+            ));
+        }
         let disposition = target.disposition(selector.algorithm.id())?;
         limits.check(ResourceKind::EvidenceRecords, self.content.records.len())?;
         limits.check(ResourceKind::ProfileReferences, self.content.records.len())?;
