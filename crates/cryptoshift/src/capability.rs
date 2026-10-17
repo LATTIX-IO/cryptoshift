@@ -308,7 +308,12 @@ impl CapabilityCatalog {
         }
         if let Some(runtime) = selector.runtime_id {
             valid_id(runtime, "capability_runtime")?;
-            charge(limits, ResourceKind::InputBytes, &mut supplied_bytes, runtime)?;
+            charge(
+                limits,
+                ResourceKind::InputBytes,
+                &mut supplied_bytes,
+                runtime,
+            )?;
         }
         if selector.scope_id != self.content.scope_id
             || selector.scope_id != target.content().scope_id
