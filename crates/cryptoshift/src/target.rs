@@ -3,12 +3,11 @@
 //! This defines *desired* algorithm/profile constraints, not validated
 //! provider capability, protocol negotiation, compliance or authorization.
 
-use std::collections::BTreeSet;
 
 use sha2::{Digest, Sha256};
 
 use crate::standards::{
-    AlgorithmRole, KnownAlgorithm, STANDARDS_CATALOG_VERSION, SecurityCategory, StandardEdition,
+    AlgorithmRole, KnownAlgorithm, SecurityCategory, StandardEdition,
 };
 use crate::{Diagnostic, DiagnosticCode, Limits, ResourceKind, SnapshotDigest};
 
