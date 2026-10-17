@@ -71,9 +71,15 @@ edges (different relations count separately); `distinct_source_count`
 deduplicates direct source node IDs. `evidence_ids` are a canonical union
 of evidence references from those edges. A node is "directly shared" in this
 limited structural sense when `distinct_source_count >= 2`. This is **not**
-a recursive reachability or operational criticality score. An HSM supporting
-two keys via HoldsKey has separate outgoing edges; this does not by itself
-prove two systems are consumers of that HSM.
+a recursive reachability or operational criticality score.
+
+`direct_outgoing_fanout()` separately reports **source-side** structural
+high fanout: total outgoing non-prerequisite edges, number of distinct
+direct targets, and evidence references. For example, one HSM with two
+`HoldsKey` relations has outgoing count two, while two systems with explicit
+`UsesHsm` relations produce an incoming distinct-source count of two at
+that same HSM. Neither condition proves the other; all source-attributed
+observations are retained without transitive inference.
 
 Dependency arcs and direct structural fanout are intentionally separate
 projections. Callers must not infer PKI interoperability, shared blast
@@ -110,7 +116,7 @@ this module's responsibility. Use the source FOSS-418/420 validators first.
 | A depends on B depends on C: C, B, A, canonical reorder | chain_has_prerequisites_first_and_is_order_invariant |
 | Diamond with unique transitive closure and ready-set tie-break | diamond_chain_has_unique_dependency_first_order |
 | Three-node cycle, self-loop, second cycle and singleton | nontrivial_cycles_self_loops_and_isolated_systems_preserved |
-| Two systems share library, PKI trust anchor and HSM directly | structural_shared_infrastructure_is_direct_not_transitive |
+| Direct shared library, trust anchor and HSM plus HSM multi-key outgoing high fanout | structural_shared_infrastructure_is_direct_not_transitive |
 | Configured vs negotiated/active must not be promoted | structural_crypto_use_retains_original_configured_classification |
 | Tight node, edge, work and output limits | bounded_analysis_and_chain_fail_closed |
 | Iterative 10k-node path under default limits | ten_thousand_systems_analyze_iteratively_without_stack_overflow |
