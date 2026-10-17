@@ -31,6 +31,7 @@ mod graph;
 mod inventory;
 mod inventory_codec;
 mod limits;
+mod topology;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
 pub use envelope::{
@@ -46,3 +47,5 @@ pub use inventory::{
 };
 
 pub use graph::{EvidenceGraph, GraphEdge, GraphNode, GraphNodeKind, GraphRelation};
+
+pub use topology::{DependencyAnalysis, DependencyTopology, DirectFanout, MigrationUnit, PrerequisiteArc};
