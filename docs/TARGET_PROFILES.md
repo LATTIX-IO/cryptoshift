@@ -30,7 +30,7 @@ target content digest is an integrity identity, not a publisher signature.
 | NIST-FIPS-203:2024-08-13 | ML-KEM-512, ML-KEM-768, ML-KEM-1024 | https://csrc.nist.gov/pubs/fips/203/final |
 | NIST-FIPS-204:2024-08-13 | ML-DSA-44, ML-DSA-65, ML-DSA-87 | https://csrc.nist.gov/pubs/fips/204/final |
 | NIST-FIPS-205:2024-08-13 | SLH-DSA-SHA2-{128,192,256}{s,f}; SLH-DSA-SHAKE-{128,192,256}{s,f} | https://csrc.nist.gov/pubs/fips/205/final |
-| NSA-CNSA-2.0:2022-v1.0 | **Separate overlay**, limited to recognized general-purpose asymmetric parameters ML-KEM-1024 and ML-DSA-87 | https://www.nsa.gov/Press-Room/News-Highlights/Article/Article/3148990/nsa-releases-future-quantum-resistant-qr-algorithm-requirements-for-national-se/ |
+| NSA-CNSA-2.0:2022-v1.0 | **Separate overlay**, limited to recognized general-purpose asymmetric parameters ML-KEM-1024 and ML-DSA-87 | https://www.nsa.gov/Press-Room/Digital-Media-Center/Document-Gallery/igphoto/2003728741/ |
 
 NIST security categories are **1, 3 and 5**, not substitute
 measurements of cryptographic implementations. The 18 exact identifiers
@@ -77,7 +77,9 @@ and consumes it to return an immutable, private-field `TargetProfile` with:
 - optional `ExplicitDeadline` carrying a specific use-case/stage, integer
   UTC time and authoritative caller-supplied source. **No global deadlines**;
 - optional source-defined expiry, evaluated only against a
-  caller-supplied time. No ambient clock or auto-updating rules.
+  caller-supplied time. If an expiring source is supplied without an
+  evaluation time, validation fails closed. No ambient clock or
+  auto-updating rules.
 
 A Forbidden algorithm must have no positive category threshold. Required
 and Permitted constraints must have a threshold no greater than the

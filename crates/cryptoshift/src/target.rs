@@ -198,14 +198,22 @@ impl TargetProfile {
         ] {
             valid_id(value, "target_identity")?;
         }
-        if let (Some(now), Some(expiry)) = (evaluation_time_unix_secs, draft.expires_at_unix_secs) {
-            if now >= expiry {
+        match (evaluation_time_unix_secs, draft.expires_at_unix_secs) {
+            (None, Some(_)) => {
+                return Err(error(
+                    DiagnosticCode::InvalidStateTransition,
+                    "target_expiry",
+                    "an expiring target requires an explicit evaluation time",
+                ));
+            }
+            (Some(now), Some(expiry)) if now >= expiry => {
                 return Err(error(
                     DiagnosticCode::StaleCriticalProfile,
                     "target_expiry",
                     "target revision is expired at the explicit evaluation time",
                 ));
             }
+            _ => {}
         }
         if draft.standards.is_empty() || draft.algorithms.is_empty() {
             return Err(error(

@@ -42,7 +42,7 @@ impl StandardEdition {
             Self::Fips204_2024 => "https://csrc.nist.gov/pubs/fips/204/final",
             Self::Fips205_2024 => "https://csrc.nist.gov/pubs/fips/205/final",
             Self::Cnsa20_2022v1 => {
-                "https://www.nsa.gov/Press-Room/News-Highlights/Article/Article/3148990/nsa-releases-future-quantum-resistant-qr-algorithm-requirements-for-national-se/"
+                "https://www.nsa.gov/Press-Room/Digital-Media-Center/Document-Gallery/igphoto/2003728741/"
             }
         }
     }
