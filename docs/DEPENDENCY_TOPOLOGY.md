@@ -5,8 +5,8 @@ policy decisions, no PQC readiness claims.
 
 ## Operational goal and trust boundary
 
-Consume **only** a \`ValidatedInventorySnapshot\` and the corresponding
-\`EvidenceGraph\` from FOSS-418/FOSS-420. \`DependencyAnalysis::analyze\` is a
+Consume **only** a `ValidatedInventorySnapshot` and the corresponding
+`EvidenceGraph` from FOSS-418/FOSS-420. `DependencyAnalysis::analyze` is a
 stateless, offline graph transformation over already validated facts. It never
 queries a live infrastructure service, dereferences URLs, reads private key
 material, invokes a cryptographic migration, or infers a cryptographic
@@ -15,20 +15,20 @@ it does not authenticate a collector or establish truth of the reported facts.
 
 The graph must already preserve source attribution, observation-vs-capability,
 source conflicts, unknown observations, and collection completeness. Analysis
-cannot silently promote \`LibraryCapability\`, \`ConfiguredProtocol\`,
-\`Inferred\`, or \`Unknown\` into negotiated/active crypto or remediation.
+cannot silently promote `LibraryCapability`, `ConfiguredProtocol`,
+`Inferred`, or `Unknown` into negotiated/active crypto or remediation.
 
 ## Input and graph relationship semantics
 
-Only edges whose \`GraphRelation == DependsOn\` participate in the directed
+Only edges whose `GraphRelation == DependsOn` participate in the directed
 prerequisite graph. These are validated System -> System edges, where
 
     A --DependsOn--> B  means  B precedes A
 
 This orientation is intentionally different from a scheduling edge. The
-\`PrerequisiteArc\` public API retains \`dependent_unit -> prerequisite_unit\`
+`PrerequisiteArc` public API retains `dependent_unit -> prerequisite_unit`
 with sorted, attributable edge evidence. The public
-\`dependency_first_order()\` reverses the scheduling orientation and returns
+`dependency_first_order()` reverses the scheduling orientation and returns
 the prerequisite before the dependent, with lexical tie-breaking among
 currently ready units.
 
@@ -36,7 +36,7 @@ System -> Library, System -> Certificate, System -> Hsm, Certificate ->
 TrustAnchor, Hsm -> Key, Key -> Data, ownership, vendor, and crypto-use
 relations are **structural**, not implicit migration prerequisites.
 
-A narrowly scoped additive FOSS-422 graph relation \`UsesHsm\` allows a
+A narrowly scoped additive FOSS-422 graph relation `UsesHsm` allows a
 System -> Hsm statement *with source evidence*. This supports reporting two
 systems with direct claims to the same HSM; it cannot prove actual hardware
 usage or whether key migration is safe.
@@ -48,29 +48,29 @@ The implementation builds forward/reverse adjacency indexes once and runs
 traversals, plus deterministic sorting and ordered map/set operations.
 Adjacency is limited to system dependencies; all system nodes, including
 isolated ones, get exactly one SCC. Every strongly connected component
-becomes one \`MigrationUnit\`, with:
-- stable \`id\` equal to the lexicographically smallest original system ID;
+becomes one `MigrationUnit`, with:
+- stable `id` equal to the lexicographically smallest original system ID;
 - original member system IDs, sorted and unique;
-- \`cyclic=true\` for multiple members **or** an explicit self-loop;
+- `cyclic=true` for multiple members **or** an explicit self-loop;
 - deduplicated evidence IDs from *within* the SCC, including self-loops.
 
 Cycles are retained as indivisible **planning candidates**, never dropped
 or presented as approved cutover decisions. Distinct SCCs collapse to a
 condensation DAG; multiple edges between two SCCs aggregate evidence.
 Ordering is deterministic using a lexicographically keyed ready set.
-The public \`prerequisite_chain(unit_id, limits)\` computes transitive
+The public `prerequisite_chain(unit_id, limits)` computes transitive
 prerequisites on demand with an explicit nonrecursive traversal, yielding a
 dependency-first subset of units and omitting the queried unit. No O(V^2)
 all-pairs reachability materialization is performed.
 
 ## Direct fanout / shared infrastructure
 
-\`direct_fanout()\` reports one row per target receiving at least one
-**non-DependsOn** incoming edge. \`incoming_edge_count\` counts direct typed
-edges (different relations count separately); \`distinct_source_count\`
-deduplicates direct source node IDs. \`evidence_ids\` are a canonical union
+`direct_fanout()` reports one row per target receiving at least one
+**non-DependsOn** incoming edge. `incoming_edge_count` counts direct typed
+edges (different relations count separately); `distinct_source_count`
+deduplicates direct source node IDs. `evidence_ids` are a canonical union
 of evidence references from those edges. A node is "directly shared" in this
-limited structural sense when \`distinct_source_count >= 2\`. This is **not**
+limited structural sense when `distinct_source_count >= 2`. This is **not**
 a recursive reachability or operational criticality score. An HSM supporting
 two keys via HoldsKey has separate outgoing edges; this does not by itself
 prove two systems are consumers of that HSM.
@@ -81,23 +81,26 @@ radius, PQC eligibility, migration readiness, or a risk score from counts.
 
 ## Bounds and rejection behavior
 
-- \`max_graph_nodes\` and \`max_graph_edges\` constrain the accepted graph at
+- `max_graph_nodes` and `max_graph_edges` constrain the accepted graph at
   analysis time even when the graph was previously created with looser limits.
-- \`max_planner_candidates\` bounds \`System\` count plus the number of direct
+  The graph's **total attached node/edge evidence references** are also
+  rechecked against `max_graph_edges` independently of the edge count, so a
+  caller cannot bypass stricter limits by reusing a loosely admitted graph.
+- `max_planner_candidates` bounds `System` count plus the number of direct
   System -> System dependency edges before adjacency construction. Default
   20,000 admits a 10,000-node/9,999-edge path.
-- \`max_export_bytes\` bounds the **total UTF-8 bytes of emitted IDs and
+- `max_export_bytes` bounds the **total UTF-8 bytes of emitted IDs and
   evidence references** in units, arcs, order and fanout. This is a
   deliberately conservative logical payload estimate, not a byte-for-byte
   encoded wire protocol or full allocator accounting. Object/container
   allocations remain structurally bounded by validated graph cardinalities.
 - Checked arithmetic rejects overflow; any failure returns a typed
-  \`Diagnostic\` and no partial topology. \`prerequisite_chain\` applies its
+  `Diagnostic` and no partial topology. `prerequisite_chain` applies its
   own caller-supplied node/edge/work/output budgets.
 - No global all-pairs transitive closure or arbitrary expansion of inferred
   dependencies. DAG cycles after SCC collapse are treated as invalid state.
 
-Note: rebuilding a validated \`EvidenceGraph\` from raw user strings is **not**
+Note: rebuilding a validated `EvidenceGraph` from raw user strings is **not**
 this module's responsibility. Use the source FOSS-418/420 validators first.
 
 ## Test-to-requirement evidence
@@ -120,7 +123,7 @@ running encryption system.
 
 From repository root:
 
-\`\`\`bash
+```bash
 python3 scripts/release_safety.py --with-cargo
 python3 -m unittest discover -s scripts -p "test_release_safety.py" -v
 cargo fmt --all -- --check
@@ -129,7 +132,7 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --all-features --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps --locked
 cargo run --example dependency_analysis --locked
-\`\`\`
+```
 
 Example expected salient lines:
 
@@ -138,10 +141,10 @@ Example expected salient lines:
     cycles: 0
     No policy decision, readiness assessment, or infrastructure change.
 
-In protected GitHub CI, **both** \`Rust checks\` and
-\`Supply chain and SemVer\` must succeed on the exact PR head and on
-the merged \`main\`. The latter executes RustSec, cargo-deny and SemVer.
-\`publish = false\`, read-only CI, and manual release-PR-only controls
+In protected GitHub CI, **both** `Rust checks` and
+`Supply chain and SemVer` must succeed on the exact PR head and on
+the merged `main`. The latter executes RustSec, cargo-deny and SemVer.
+`publish = false`, read-only CI, and manual release-PR-only controls
 remain unchanged.
 
 ## Known limitations and next increment boundaries
