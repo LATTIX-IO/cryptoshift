@@ -191,6 +191,28 @@ pub enum ResidualRiskKind {
     MissingCapabilityEvidence = 15,
 }
 
+/// Exact type-qualified origin of a residual-risk record.
+///
+/// Source evidence may be shared across different capability claims or
+/// exception requests; the subject must remain unique to the original fact.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PlanFacetSubject {
+    /// Capability fact addressed by catalog and record identity together.
+    Capability {
+        /// Exact versioned catalog ID under the plan's tenant scope.
+        catalog_id: String,
+        /// Exact record ID unique within that catalog revision.
+        record_id: String,
+    },
+    /// Exact exception request ID and its targeted source policy constraint.
+    Exception {
+        /// Distinct exception request identity.
+        request_id: String,
+        /// Exact recognized target algorithm, protocol or certificate profile.
+        target_constraint_id: String,
+    },
+}
+
 /// One individually traceable residual risk/required action.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResidualRiskFacet {
@@ -198,6 +220,8 @@ pub struct ResidualRiskFacet {
     pub id: String,
     /// Scope-wide facets have no SCC; otherwise exact SCC unit ID.
     pub unit_id: Option<String>,
+    /// Exact original capability or exception assertion; None for D1/D2 gates.
+    pub subject: Option<PlanFacetSubject>,
     /// Stable typed facet classification.
     pub kind: ResidualRiskKind,
     /// Exact original D1 blocker, if applicable.
@@ -709,6 +733,7 @@ impl MigrationPlanner {
                 facets.push(ResidualRiskFacet {
                     id: String::new(),
                     unit_id: Some(unit.unit_id.clone()),
+                subject: None,
                     kind,
                     blocker_id: gate.blocker_id.clone(),
                     action_id: gate.action_id.clone(),
@@ -724,6 +749,7 @@ impl MigrationPlanner {
                 id: String::new(),
                 unit_id: None,
                 kind: ResidualRiskKind::MissingCapabilityEvidence,
+                subject: None,
                 blocker_id: None,
                 action_id: None,
                 prerequisite_unit_id: None,
@@ -738,6 +764,10 @@ impl MigrationPlanner {
                         id: String::new(),
                         unit_id: None,
                         kind: ResidualRiskKind::VendorCapability,
+                        subject: Some(PlanFacetSubject::Capability {
+                            catalog_id: catalog.content().catalog_id.clone(),
+                            record_id: record.record_id.clone(),
+                        }),
                         blocker_id: None,
                         action_id: None,
                         prerequisite_unit_id: None,
@@ -769,6 +799,10 @@ impl MigrationPlanner {
                 id: String::new(),
                 unit_id: Some(exception.request.unit_id.clone()),
                 kind: ResidualRiskKind::ExceptionUnverified,
+                subject: Some(PlanFacetSubject::Exception {
+                    request_id: exception.request.request_id.clone(),
+                    target_constraint_id: exception.request.target_constraint_id.clone(),
+                }),
                 blocker_id: None,
                 action_id: None,
                 prerequisite_unit_id: None,
