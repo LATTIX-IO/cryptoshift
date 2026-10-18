@@ -948,16 +948,24 @@ impl RemediationAnalyzer {
         // dependent-to-prerequisite communication relationship. Walk graph
         // edges once, bounded by the existing GraphEdges limit.
         let mut missing_dependency_units = BTreeSet::new();
-        for edge in graph.edges().iter().filter(|edge|
-            edge.relation == GraphRelation::DependsOn
-        ) {
+        for edge in graph
+            .edges()
+            .iter()
+            .filter(|edge| edge.relation == GraphRelation::DependsOn)
+        {
             let dependent = unit_by_system.get(edge.from.as_str()).ok_or_else(|| {
-                problem(DiagnosticCode::InvalidReference, "remediation_dependency_source",
-                    "dependency source must belong to an exact SCC")
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_dependency_source",
+                    "dependency source must belong to an exact SCC",
+                )
             })?;
             let prerequisite = unit_by_system.get(edge.to.as_str()).ok_or_else(|| {
-                problem(DiagnosticCode::InvalidReference, "remediation_dependency_target",
-                    "dependency target must belong to an exact SCC")
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_dependency_target",
+                    "dependency target must belong to an exact SCC",
+                )
             })?;
             let pair = if edge.from <= edge.to {
                 (edge.from.clone(), edge.to.clone())
