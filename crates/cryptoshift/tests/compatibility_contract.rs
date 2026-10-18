@@ -764,9 +764,11 @@ fn hybrid_without_negotiated_combiner_remains_unknown() {
     let report = analyze(&g, &target, &l, &r, &req).unwrap();
     assert_eq!(report.status(), CompatibilityStatus::Unknown);
     assert!(has(&report, CompatibilityCode::HybridProofMissing));
-    assert!(report
-        .prerequisites()
-        .contains(&CompatibilityPrerequisite::VerifyHybrid));
+    assert!(
+        report
+            .prerequisites()
+            .contains(&CompatibilityPrerequisite::VerifyHybrid)
+    );
 }
 
 #[test]
@@ -784,7 +786,9 @@ fn hybrid_with_matching_handshake_but_no_required_pki_remains_unknown() {
     let report = analyze(&g, &target, &l, &r, &req).unwrap();
     assert_eq!(report.status(), CompatibilityStatus::Unknown);
     assert!(has(&report, CompatibilityCode::PkiMissing));
-    assert!(report
-        .prerequisites()
-        .contains(&CompatibilityPrerequisite::VerifyPki));
+    assert!(
+        report
+            .prerequisites()
+            .contains(&CompatibilityPrerequisite::VerifyPki)
+    );
 }
