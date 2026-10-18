@@ -256,6 +256,14 @@ impl WavePlanner {
         limits.check(ResourceKind::GraphNodes, request.capacity_systems_per_wave)?;
         limits.check(ResourceKind::PlanWaves, request.max_waves)?;
         limits.check(ResourceKind::GraphNodes, topology.units().len())?;
+        // SCC grouping must not bypass a tighter caller's original graph-node
+        // budget: count every system member before allocating wave/ready data.
+        let mut system_count = 0_usize;
+        for unit in topology.units() {
+            system_count = limits.checked_add(
+                ResourceKind::GraphNodes, system_count, unit.system_ids.len(),
+            )?;
+        }
         limits.check(ResourceKind::GraphEdges, topology.prerequisites().len())?;
         limits.check(ResourceKind::PlanActions, remediation.actions().len())?;
         limits.check(ResourceKind::Diagnostics, remediation.blockers().len())?;
