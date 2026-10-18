@@ -202,6 +202,8 @@ pub enum RollbackRequirement {
 pub struct BlockerFinding {
     /// Exact versioned source/input digests, independently inspectable per finding.
     pub source_bindings: RemediationBindings,
+    /// Exact canonical digest of all associated compatibility evidence artifacts.
+    pub compatibility_set_digest: SnapshotDigest,
     /// Full-content-derived stable ID.
     pub id: String,
     /// Indivisible topology migration-unit ID.
@@ -225,6 +227,8 @@ pub struct BlockerFinding {
 pub struct RemediationAction {
     /// Exact versioned source/input digests, independently inspectable per action.
     pub source_bindings: RemediationBindings,
+    /// Exact canonical digest of all associated compatibility evidence artifacts.
+    pub compatibility_set_digest: SnapshotDigest,
     /// Digest-derived identity rotates with semantic input versions.
     pub id: String,
     /// Exact SCC migration unit.
@@ -272,6 +276,7 @@ pub struct RemediationBindings {
 #[derive(Clone, Debug)]
 pub struct RemediationAnalysis {
     bindings: RemediationBindings,
+    compatibility_set_digest: SnapshotDigest,
     blockers: Vec<BlockerFinding>,
     actions: Vec<RemediationAction>,
     canonical: Vec<u8>,
@@ -283,6 +288,11 @@ impl RemediationAnalysis {
     #[must_use]
     pub const fn bindings(&self) -> RemediationBindings {
         self.bindings
+    }
+    /// Canonical digest binding the complete set of peer compatibility reports.
+    #[must_use]
+    pub const fn compatibility_set_digest(&self) -> SnapshotDigest {
+        self.compatibility_set_digest
     }
     /// Sorted source-attributed unit blockers.
     #[must_use]
@@ -716,6 +726,16 @@ impl RemediationAnalyzer {
             }
         }
 
+        // A changed compatibility artifact invalidates previous blocker/action
+        // IDs even when other pinned upstream digests and evidence names match.
+        let mut compat_encoder = Encoder::new(limits);
+        compat_encoder.raw(b"CSHIFT_REMEDIATION_COMPAT_SET_V1")?;
+        compat_encoder.count(seen_reports.len())?;
+        for digest in &seen_reports {
+            compat_encoder.raw(digest)?;
+        }
+        let compatibility_set_digest = SnapshotDigest::hash(&compat_encoder.finish());
+
         // Index owner claims once; do not scan every graph edge for each node.
         let mut owners_by_system = BTreeMap::<&str, BTreeSet<&str>>::new();
         let mut owner_evidence_by_system = BTreeMap::<&str, BTreeSet<&str>>::new();
@@ -964,6 +984,7 @@ impl RemediationAnalyzer {
             let mut id_data = Encoder::new(limits);
             id_data.raw(b"CSHIFT_BLOCKER_D1_V1")?;
             id_data.bindings(pinned)?;
+            id_data.digest(compatibility_set_digest)?;
             id_data.string(&unit_id)?;
             id_data.code(code)?;
             id_data.evidences(&evidence)?;
@@ -996,6 +1017,7 @@ impl RemediationAnalyzer {
                 .push(action_id.clone());
             actions.push(RemediationAction {
                 source_bindings: pinned,
+                compatibility_set_digest,
                 id: action_id,
                 unit_id: unit_id.clone(),
                 kind: action_kind,
@@ -1014,6 +1036,7 @@ impl RemediationAnalyzer {
             });
             blockers.push(BlockerFinding {
                 source_bindings: pinned,
+                compatibility_set_digest,
                 id: blocker_id,
                 unit_id,
                 code,
@@ -1029,6 +1052,7 @@ impl RemediationAnalyzer {
             let mut enc = Encoder::new(limits);
             enc.raw(b"CSHIFT_UNIT_REVIEW_D1_V1")?;
             enc.bindings(pinned)?;
+            enc.digest(compatibility_set_digest)?;
             enc.string(&unit.id)?;
             unit_gate_ids.insert(
                 unit.id.clone(),
@@ -1075,6 +1099,7 @@ impl RemediationAnalyzer {
             })?;
             actions.push(RemediationAction {
                 source_bindings: pinned,
+                compatibility_set_digest,
                 id: unit_gate_ids.get(&unit.id).cloned().ok_or_else(|| {
                     problem(
                         DiagnosticCode::InvalidReference,
@@ -1103,6 +1128,7 @@ impl RemediationAnalyzer {
         writer.raw(b"CSHIFT_REMEDIATION_REPORT_V1")?;
         writer.u16(REMEDIATION_ANALYSIS_VERSION)?;
         writer.bindings(pinned)?;
+        writer.digest(compatibility_set_digest)?;
         let mut digests: Vec<_> = compatibilities
             .iter()
             .map(|v| v.digest().as_bytes())
@@ -1124,6 +1150,7 @@ impl RemediationAnalyzer {
         let digest = SnapshotDigest::hash(&canonical);
         Ok(RemediationAnalysis {
             bindings: pinned,
+            compatibility_set_digest,
             blockers,
             actions,
             canonical,
@@ -1554,6 +1581,7 @@ impl<'a> Encoder<'a> {
     }
     fn blocker(&mut self, blocker: &BlockerFinding) -> Result<(), Diagnostic> {
         self.bindings(blocker.source_bindings)?;
+        self.digest(blocker.compatibility_set_digest)?;
         self.string(&blocker.id)?;
         self.string(&blocker.unit_id)?;
         self.code(blocker.code)?;
@@ -1564,6 +1592,7 @@ impl<'a> Encoder<'a> {
     }
     fn action(&mut self, action: &RemediationAction) -> Result<(), Diagnostic> {
         self.bindings(action.source_bindings)?;
+        self.digest(action.compatibility_set_digest)?;
         self.string(&action.id)?;
         self.string(&action.unit_id)?;
         self.raw(&[action.kind as u8])?;
