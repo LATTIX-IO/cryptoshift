@@ -1224,7 +1224,6 @@ fn missing_certificate_chain_and_revocation_preserve_pki_residual_risk() {
     }));
 }
 
-
 #[test]
 fn shared_vendor_document_yields_independent_capability_facet_identities() {
     let f = fixture(&["a"], &[], true, None);
@@ -1248,10 +1247,11 @@ fn shared_vendor_document_yields_independent_capability_facet_identities() {
     assert_eq!(facets.len(), 2);
     assert_ne!(facets[0].id, facets[1].id);
     assert_ne!(facets[0].subject, facets[1].subject);
-    assert!(facets.iter().all(|item| matches!(
-        &item.subject,
-        Some(PlanFacetSubject::Capability { .. })
-    )));
+    assert!(
+        facets
+            .iter()
+            .all(|item| matches!(&item.subject, Some(PlanFacetSubject::Capability { .. })))
+    );
 }
 
 #[test]
@@ -1272,13 +1272,16 @@ fn shared_exception_justification_never_collapses_distinct_request_ids() {
     assert_eq!(facets.len(), 2);
     assert_ne!(facets[0].id, facets[1].id);
     assert_ne!(facets[0].subject, facets[1].subject);
-    let subjects: Vec<_> = facets.iter().filter_map(|item| match &item.subject {
-        Some(PlanFacetSubject::Exception {
-            request_id,
-            target_constraint_id,
-        }) => Some((request_id.as_str(), target_constraint_id.as_str())),
-        _ => None,
-    }).collect();
+    let subjects: Vec<_> = facets
+        .iter()
+        .filter_map(|item| match &item.subject {
+            Some(PlanFacetSubject::Exception {
+                request_id,
+                target_constraint_id,
+            }) => Some((request_id.as_str(), target_constraint_id.as_str())),
+            _ => None,
+        })
+        .collect();
     assert!(subjects.contains(&("exception-1", KnownAlgorithm::MlKem1024.id())));
     assert!(subjects.contains(&("exception-2", "transport")));
 }

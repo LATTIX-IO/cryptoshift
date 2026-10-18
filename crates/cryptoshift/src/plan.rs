@@ -733,7 +733,7 @@ impl MigrationPlanner {
                 facets.push(ResidualRiskFacet {
                     id: String::new(),
                     unit_id: Some(unit.unit_id.clone()),
-                subject: None,
+                    subject: None,
                     kind,
                     blocker_id: gate.blocker_id.clone(),
                     action_id: gate.action_id.clone(),

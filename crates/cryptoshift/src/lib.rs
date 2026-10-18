@@ -111,6 +111,6 @@ pub use wave::{
 pub use plan::{
     ClaimedExceptionApproval, MIGRATION_PLAN_VERSION, MigrationPlanDraft, MigrationPlanRequest,
     MigrationPlanner, PlanAssessmentState, PlanCatalogPin, PlanChangeKind, PlanDiff,
-    PlanEvidenceRef, PlanExceptionRecord, PlanExceptionRequest, PlanExceptionState, PlanScorePin,
-    PlanFacetSubject, PlanSourcePins, ResidualRiskFacet, ResidualRiskKind,
+    PlanEvidenceRef, PlanExceptionRecord, PlanExceptionRequest, PlanExceptionState,
+    PlanFacetSubject, PlanScorePin, PlanSourcePins, ResidualRiskFacet, ResidualRiskKind,
 };

@@ -235,12 +235,18 @@ impl<'a> Encoder<'a> {
         self.bool(value.subject.is_some())?;
         if let Some(subject) = &value.subject {
             match subject {
-                PlanFacetSubject::Capability { catalog_id, record_id } => {
+                PlanFacetSubject::Capability {
+                    catalog_id,
+                    record_id,
+                } => {
                     self.u8(1)?;
                     self.string(catalog_id)?;
                     self.string(record_id)?;
                 }
-                PlanFacetSubject::Exception { request_id, target_constraint_id } => {
+                PlanFacetSubject::Exception {
+                    request_id,
+                    target_constraint_id,
+                } => {
                     self.u8(2)?;
                     self.string(request_id)?;
                     self.string(target_constraint_id)?;
