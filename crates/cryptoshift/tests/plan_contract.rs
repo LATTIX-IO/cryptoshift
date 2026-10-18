@@ -858,3 +858,123 @@ fn golden_v1_migration_plan_export() {
         include_str!("fixtures/plan_v1.sha256").trim()
     );
 }
+
+
+#[test]
+fn different_claim_state_with_identical_evidence_reference_rotates_facet_ids(){
+    let f=fixture(&["a"],&[],true,None);
+    let wave=plan(&f,1,1,&[]);
+    let original=catalog("vendor","source-r1");
+    let mut changed=original.content().clone();
+    changed.records[0].state=CapabilityState::Roadmap;
+    let revised=CapabilityCatalog::new(changed,&Limits::default(),Some(NOW)).unwrap();
+    let old=build(&f,&wave,&[&original],None,vec![]);
+    let new=build(&f,&wave,&[&revised],None,vec![]);
+    assert_ne!(original.digest(),revised.digest());
+    assert_ne!(old.digest(),new.digest());
+    let delta=old.semantic_diff(&new,&Limits::default()).unwrap();
+    assert!(delta.changes.contains(&PlanChangeKind::Capabilities));
+    assert!(delta.changes.contains(&PlanChangeKind::ResidualRisk));
+    let old_vendor:Vec<_>=old.residual_risks().iter()
+        .filter(|v|v.kind==ResidualRiskKind::VendorCapability)
+        .map(|v|v.id.as_str()).collect();
+    let new_vendor:Vec<_>=new.residual_risks().iter()
+        .filter(|v|v.kind==ResidualRiskKind::VendorCapability)
+        .map(|v|v.id.as_str()).collect();
+    assert_ne!(old_vendor,new_vendor);
+}
+
+#[test]
+fn foreign_catalog_and_expired_capability_evidence_are_rejected(){
+    let f=fixture(&["a"],&[],true,None);
+    let wave=plan(&f,1,1,&[]);
+    let c=catalog("vendor","rev1");
+    let mut altered=c.content().clone();
+    altered.scope_id="tenant-b".into();
+    altered.records[0].scope_id="tenant-b".into();
+    let foreign=CapabilityCatalog::new(altered,&Limits::default(),Some(NOW)).unwrap();
+    assert_eq!(MigrationPlanner::input_pins(
+        &f.topology,&f.remediation,&wave,&f.target,&[&foreign],None,&Limits::default(),
+    ).unwrap_err().code,DiagnosticCode::InvalidReference);
+    let mut stale=c.content().clone();
+    stale.records[0].evidence.expires_at_unix_secs=Some(NOW-1);
+    let old=CapabilityCatalog::new(stale,&Limits::default(),Some(NOW-5)).unwrap();
+    assert_eq!(MigrationPlanner::input_pins(
+        &f.topology,&f.remediation,&wave,&f.target,&[&old],None,&Limits::default(),
+    ).unwrap_err().code,DiagnosticCode::StaleCriticalProfile);
+}
+
+#[test]
+fn a_changed_exception_target_cannot_reuse_risk_facet_identity(){
+    let f=fixture(&["a"],&[],true,None);
+    let wave=plan(&f,1,1,&[]);
+    let old=build(&f,&wave,&[],None,vec![proposal("req")]);
+    let mut different=proposal("req");
+    different.target_constraint_id="transport".into();
+    let new=build(&f,&wave,&[],None,vec![different]);
+    assert_ne!(old.digest(),new.digest());
+    let old_id=old.residual_risks().iter().find(|r|
+        r.kind==ResidualRiskKind::ExceptionUnverified).unwrap().id.clone();
+    let new_id=new.residual_risks().iter().find(|r|
+        r.kind==ResidualRiskKind::ExceptionUnverified).unwrap().id.clone();
+    assert_ne!(old_id,new_id);
+    let delta=old.semantic_diff(&new,&Limits::default()).unwrap();
+    assert!(delta.changes.contains(&PlanChangeKind::Exceptions));
+    assert!(delta.changes.contains(&PlanChangeKind::ResidualRisk));
+}
+
+#[test]
+fn changed_wave_review_hints_rotate_plan_identity_even_when_readiness_unchanged(){
+    let f=fixture(&["a"],&[],false,None);
+    let first=plan(&f,1,1,&[]);
+    let next=plan(&f,1,1,&["a"]);
+    assert_eq!(first.readiness(),next.readiness());
+    assert_ne!(first.digest(),next.digest());
+    let p=build(&f,&first,&[],None,vec![]);
+    let q=build(&f,&next,&[],None,vec![]);
+    assert_ne!(p.digest(),q.digest());
+    let delta=p.semantic_diff(&q,&Limits::default()).unwrap();
+    assert!(delta.changes.contains(&PlanChangeKind::WavePlan));
+    assert!(delta.changes.contains(&PlanChangeKind::ResidualRisk));
+}
+
+#[test]
+fn a_recomputed_risk_vector_invalidates_old_plan_pins(){
+    let mut f=fixture(&["a"],&[],true,None);
+    let initial_wave=plan(&f,1,1,&[]);
+    let pinned=source_pins(&f,&initial_wave,&[],None);
+    let old=build(&f,&initial_wave,&[],None,vec![]);
+    with_complete_source_claims(&mut f);
+    let new_wave=plan(&f,1,1,&[]);
+    let fresh=build(&f,&new_wave,&[],None,vec![]);
+    assert_eq!(pinned.inventory_digest,fresh.pins().inventory_digest);
+    assert_eq!(pinned.graph_digest,fresh.pins().graph_digest);
+    assert_ne!(pinned.risk_digest,fresh.pins().risk_digest);
+    let stale=MigrationPlanner::build(
+        &f.topology,&f.remediation,&new_wave,&f.target,&[],None,
+        &MigrationPlanRequest{
+            schema_version:MIGRATION_PLAN_VERSION,
+            expected_pins:pinned,
+            exceptions:vec![],
+        },&Limits::default()
+    ).unwrap_err();
+    assert_eq!(stale.code,DiagnosticCode::IntegrityMismatch);
+    let delta=old.semantic_diff(&fresh,&Limits::default()).unwrap();
+    assert!(delta.changes.contains(&PlanChangeKind::Risk));
+    assert!(delta.changes.contains(&PlanChangeKind::Remediation));
+}
+
+#[test]
+fn residual_risk_identifiers_reject_stale_scoring_profile_bindings(){
+    let f=fixture(&["a"],&[],true,None);
+    let wave=plan(&f,1,1,&[]);
+    let previous=scoring();
+    let altered=ScoreProfile::new(
+        "scoring-v1".into(),SCORE_PROFILE_VERSION,
+        [900,1100,1000,1000,1000,1000,1000,1000,1000,1000],
+    ).unwrap();
+    let prior=build(&f,&wave,&[],Some(&previous),vec![]);
+    let next=build(&f,&wave,&[],Some(&altered),vec![]);
+    assert_ne!(prior.residual_risks()[0].id,next.residual_risks()[0].id);
+    assert_ne!(prior.digest(),next.digest());
+}
