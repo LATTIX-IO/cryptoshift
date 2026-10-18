@@ -43,6 +43,16 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps --lock
 python3 scripts/release_safety.py --with-cargo
 ```
 
+The standalone example is independently executed by CI:
+
+```text
+cargo run -p cryptoshift --example peer_compatibility --locked
+```
+
+Expected output includes `status: Unknown`, `NegotiationMissing`, and an explicit statement that no protocol negotiation was authenticated.
+
+The frozen v1 report fixture is `crates/cryptoshift/tests/fixtures/compatibility_v1.sha256`: SHA-256 `87df1c01c72506ef9eeebc6f8b5bfc6b08f4050172cbd1f9fb72d38cd00ef986` over 881 canonical bytes. This is a regression identity, not an authentication signature. Changes to canonical framing require an explicit schema-version review.
+
 Contract tests in `crates/cryptoshift/tests/compatibility_contract.rs` cover advertised-only support, purported handshakes, runtime/scope substitution, unsafe downgrade, unapproved protocol, tampered graph identity, stale evidence, deterministic observation order, duplicate provenance, and resource exhaustion.
 
 ## Not implemented
@@ -50,3 +60,7 @@ Contract tests in `crates/cryptoshift/tests/compatibility_contract.rs` cover adv
 No authenticated negotiation evidence adapter, trust-chain parser/validator, certificate revocation verifier, protocol-specific hybrid adapter, automatic traffic discovery, migration execution, remediation actions, or migration-wave planner. Follow-on work must introduce a separately defined, testable proof-verifier trust boundary before emitting authoritative `Compatible`.
 
 Publication remains disabled pending FOSS-456.
+
+## CI qualification
+
+CI checks Rust stable (fmt, check, strict Clippy, tests, rustdoc), pinned Rust 1.85 MSRV check and tests, direct example execution, release-safety regressions, RustSec, cargo-deny and cargo-semver-checks. Both Rust and supply-chain checks must be green on the exact PR head. The branch ruleset currently enforces only `Rust checks`; additional checks must be reviewed manually until governance is upgraded.
