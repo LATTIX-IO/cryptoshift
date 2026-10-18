@@ -1180,12 +1180,16 @@ impl MigrationPlanDraft {
         if !changed_exception_ids.is_empty() {
             changes.insert(PlanChangeKind::Exceptions);
         }
-        let total = changed_units.len()
-            + blocker_ids.len()
-            + action_ids.len()
-            + residual_ids.len()
-            + changed_exception_ids.len();
-        limits.check(ResourceKind::Diagnostics, total)?;
+        let mut total = 0_usize;
+        for count in [
+            changed_units.len(),
+            blocker_ids.len(),
+            action_ids.len(),
+            residual_ids.len(),
+            changed_exception_ids.len(),
+        ] {
+            total = limits.checked_add(ResourceKind::Diagnostics, total, count)?;
+        }
         Ok(PlanDiff {
             changes: changes.into_iter().collect(),
             changed_unit_ids: changed_units,
