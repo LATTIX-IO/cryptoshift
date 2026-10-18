@@ -623,7 +623,6 @@ fn inferred_only_negotiation_cannot_be_promoted_to_observed_wire_fact() {
     );
 }
 
-
 #[test]
 fn graph_reference_budgets_and_identifiers_fail_before_cloning() {
     let raw = ValidatedInventorySnapshot::new(snapshot(false, true), &Limits::default())
@@ -725,15 +724,14 @@ fn high_fanout_evidence_lookup_matches_only_current_observation_references() {
         nodes: &nodes,
         edges: &edges,
     };
-    let after = NeutralInventoryAdapter::project(
-        &input_doc,
-        raw.digest,
-        &Limits::default(),
-        NOW,
-    )
-    .unwrap();
+    let after =
+        NeutralInventoryAdapter::project(&input_doc, raw.digest, &Limits::default(), NOW).unwrap();
     references.reverse();
-    let mut modified = claim(NeutralChangeKind::ObservationModified, Some("obs-proto"), "srv");
+    let mut modified = claim(
+        NeutralChangeKind::ObservationModified,
+        Some("obs-proto"),
+        "srv",
+    );
     modified.evidence_ids = references;
     let result = NeutralChangeSet::new(
         &before,

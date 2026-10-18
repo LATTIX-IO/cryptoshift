@@ -216,8 +216,7 @@ impl NeutralInventoryAdapter {
             input.producer_id.len(),
         )?;
         for value in [input.producer_revision, input.scope_id] {
-            input_bytes =
-                limits.checked_add(ResourceKind::InputBytes, input_bytes, value.len())?;
+            input_bytes = limits.checked_add(ResourceKind::InputBytes, input_bytes, value.len())?;
         }
         for node in input.nodes {
             identifier(&node.id, "neutral_graph_node")?;
@@ -226,11 +225,15 @@ impl NeutralInventoryAdapter {
             if let Some(observation_id) = &node.observation_id {
                 identifier(observation_id, "neutral_graph_observation")?;
                 input_bytes = limits.checked_add(
-                    ResourceKind::InputBytes, input_bytes, observation_id.len(),
+                    ResourceKind::InputBytes,
+                    input_bytes,
+                    observation_id.len(),
                 )?;
             }
             reference_count = limits.checked_add(
-                ResourceKind::GraphEdges, reference_count, node.evidence_ids.len(),
+                ResourceKind::GraphEdges,
+                reference_count,
+                node.evidence_ids.len(),
             )?;
             for id in &node.evidence_ids {
                 identifier(id, "neutral_node_evidence")?;
@@ -245,7 +248,9 @@ impl NeutralInventoryAdapter {
                     limits.checked_add(ResourceKind::InputBytes, input_bytes, value.len())?;
             }
             reference_count = limits.checked_add(
-                ResourceKind::GraphEdges, reference_count, edge.evidence_ids.len(),
+                ResourceKind::GraphEdges,
+                reference_count,
+                edge.evidence_ids.len(),
             )?;
             for id in &edge.evidence_ids {
                 identifier(id, "neutral_edge_evidence")?;
