@@ -564,3 +564,21 @@ fn tight_limits_reject_existing_snapshot_graph_and_delta() {
         DiagnosticCode::ResourceLimitExceeded
     );
 }
+
+#[test]
+fn frozen_neutral_change_v1_content_identity() {
+    let before = project(false, true);
+    let after = project(true, false);
+    let changes = vec![
+        claim(NeutralChangeKind::ObservationModified, Some("obs-proto"), "srv"),
+        claim(NeutralChangeKind::TentativeAbsent, None, "legacy"),
+    ];
+    let frozen = NeutralChangeSet::new(
+        &before, &after, input(&before, &after, changes), &Limits::default(),
+    ).unwrap();
+    let bytes = frozen.export(&Limits::default()).unwrap();
+    assert_eq!(
+        format!("{} {}", frozen.digest().as_identifier(), bytes.len()),
+        include_str!("fixtures/neutral_change_v1.sha256").trim()
+    );
+}
