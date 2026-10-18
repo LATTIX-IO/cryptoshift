@@ -355,3 +355,14 @@ fn bounded_source_references_and_outputs_fail_closed() {
         DiagnosticCode::ResourceLimitExceeded
     );
 }
+
+#[test]
+fn frozen_neutral_policy_v1_content_identity() {
+    let target = target();
+    let reviewed = NeutralPolicyReview::new(result(&target), &target, &Limits::default()).unwrap();
+    let bytes = reviewed.export(&Limits::default()).unwrap();
+    assert_eq!(
+        format!("{} {}", reviewed.digest().as_identifier(), bytes.len()),
+        include_str!("fixtures/neutral_policy_v1.sha256").trim()
+    );
+}
