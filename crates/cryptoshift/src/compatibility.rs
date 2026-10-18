@@ -390,6 +390,8 @@ pub struct CompatibilityBindings {
 #[derive(Clone, Debug)]
 pub struct CompatibilityAnalysis {
     bindings: CompatibilityBindings,
+    initiator: EndpointIdentity,
+    responder: EndpointIdentity,
     status: CompatibilityStatus,
     findings: Vec<CompatibilityFinding>,
     prerequisites: Vec<CompatibilityPrerequisite>,
@@ -401,6 +403,18 @@ pub struct CompatibilityAnalysis {
 }
 
 impl CompatibilityAnalysis {
+    /// Exact initiating System node and runtime identity of this report.
+    #[must_use]
+    pub const fn initiator(&self) -> &EndpointIdentity {
+        &self.initiator
+    }
+
+    /// Exact responding System node and runtime identity of this report.
+    #[must_use]
+    pub const fn responder(&self) -> &EndpointIdentity {
+        &self.responder
+    }
+
     /// Pinned graph, inventory, desired target and catalog versions.
     #[must_use]
     pub const fn bindings(&self) -> CompatibilityBindings {
@@ -1029,6 +1043,8 @@ impl CompatibilityAnalyzer {
         let digest = SnapshotDigest::hash(&canonical);
         Ok(CompatibilityAnalysis {
             bindings,
+            initiator: request.initiator.clone(),
+            responder: request.responder.clone(),
             status,
             findings,
             prerequisites,
