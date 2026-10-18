@@ -590,3 +590,40 @@ fn frozen_neutral_change_v1_content_identity() {
         include_str!("fixtures/neutral_change_v1.sha256").trim()
     );
 }
+
+#[test]
+fn inferred_only_negotiation_cannot_be_promoted_to_observed_wire_fact() {
+    let mut untrusted = snapshot(true, false);
+    untrusted.evidence[0].basis = EvidenceBasis::Inferred;
+    let artifact = ValidatedInventorySnapshot::new(untrusted, &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (nodes, edges) = nodes("ev-new");
+    let submitted = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r2",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &artifact.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(
+            &submitted,
+            artifact.digest,
+            &Limits::default(),
+            NOW,
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::InvalidStateTransition,
+    );
+}
