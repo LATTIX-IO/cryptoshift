@@ -76,6 +76,16 @@ jobs:
           grep -Fq "residual risk facets:" <<< "$output"
           grep -Fq "migration plan digest: sha256:" <<< "$output"
           grep -Fq "not an authorization to execute" <<< "$output"
+      - name: Independent neutral adapter Cargo consumer
+        shell: bash
+        run: |
+          cargo fmt --manifest-path acceptance/neutral-consumer/Cargo.toml -- --check
+          output=$(cargo run --offline --manifest-path acceptance/neutral-consumer/Cargo.toml)
+          printf '%s\n' "$output"
+          grep -Fq "neutral inventory: 1" <<< "$output"
+          grep -Fq "neutral delta claims: 1" <<< "$output"
+          grep -Fq "neutral policy gate: Unverified" <<< "$output"
+          grep -Fq "No authentication, negotiated peer proof, migration approval, or publishing occurred." <<< "$output"
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
@@ -97,6 +107,8 @@ jobs:
         run: cargo +1.85.0 check --workspace --all-targets --all-features --locked
       - name: Test on MSRV
         run: cargo +1.85.0 test --workspace --all-features --locked
+      - name: Independently build neutral fixture consumer on MSRV
+        run: cargo +1.85.0 run --offline --manifest-path acceptance/neutral-consumer/Cargo.toml
 
   supply-chain:
     name: Supply chain and SemVer
