@@ -96,5 +96,5 @@ pub use remediation::{
     BlockerCode, BlockerEvidenceState, BlockerFinding, BlockerSeverity,
     REMEDIATION_ANALYSIS_VERSION, RemediationAction, RemediationActionKind, RemediationAnalysis,
     RemediationAnalyzer, RemediationBindings, RemediationEvidence, RemediationGate,
-    RemediationOwner, RollbackRequirement,
+    MaintenanceRequirement, RemediationOwner, RollbackRequirement,
 };
