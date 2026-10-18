@@ -998,3 +998,23 @@ fn dependency_without_protocol_evidence_does_not_invent_handshake_observations()
         matches!(finding.code, BlockerCode::Compatibility(CompatibilityCode::NegotiationMissing))
     ));
 }
+
+#[test]
+fn distinct_candidates_for_same_peers_are_not_automatically_conflicting() {
+    let f = fixture(true, false);
+    let baseline = peer_analysis(&f, false);
+    let forbidden_fallback = peer_analysis(&f, true);
+    assert_ne!(baseline.digest(), forbidden_fallback.digest());
+    let report = run(&f, &[&baseline, &forbidden_fallback]).unwrap();
+    let unresolved = report
+        .blockers()
+        .iter()
+        .find(|item| item.unit_id == "a" && item.code == BlockerCode::PeerProofUnverified)
+        .unwrap();
+    assert_eq!(unresolved.evidence_state, BlockerEvidenceState::Unknown);
+    assert!(has(
+        &report,
+        "a",
+        BlockerCode::Compatibility(CompatibilityCode::DowngradeRejected)
+    ));
+}
