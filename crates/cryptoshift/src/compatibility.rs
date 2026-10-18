@@ -800,7 +800,7 @@ impl CompatibilityAnalyzer {
                             &mut findings,
                             CompatibilitySubject::Protocol,
                             CompatibilityCode::NegotiationMismatch,
-                            &[reference.clone()],
+                            std::slice::from_ref(&reference),
                         );
                     }
                     if item.classical_fallback_used {
@@ -809,7 +809,7 @@ impl CompatibilityAnalyzer {
                             &mut findings,
                             CompatibilitySubject::Protocol,
                             CompatibilityCode::DowngradeRejected,
-                            &[reference.clone()],
+                            std::slice::from_ref(&reference),
                         );
                     }
                     if let Some(hybrid) = &request.hybrid {
@@ -870,7 +870,7 @@ impl CompatibilityAnalyzer {
                             &mut findings,
                             CompatibilitySubject::Pki,
                             CompatibilityCode::PkiMismatch,
-                            &[reference.clone()],
+                            std::slice::from_ref(&reference),
                         );
                     }
                     if item.validation_at_unix_secs > evaluated_at_unix_secs
