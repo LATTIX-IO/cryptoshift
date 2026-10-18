@@ -285,8 +285,8 @@ fn future_or_unreferenced_graph_evidence_is_not_accepted() {
         .unwrap()
         .export(&Limits::default())
         .unwrap();
-    let (mut nodes, edges) = nodes("ev-old");
-    nodes[1].evidence_ids = vec!["unknown".into()];
+    let (mut bad_nodes, edges) = nodes("ev-old");
+    bad_nodes[1].evidence_ids = vec!["unknown".into()];
     let doc = NeutralInventoryInput {
         schema_version: 1,
         producer_id: PRODUCER,
@@ -299,7 +299,7 @@ fn future_or_unreferenced_graph_evidence_is_not_accepted() {
             source_id: PRODUCER,
             critical_profiles: &[],
         },
-        nodes: &nodes,
+        nodes: &bad_nodes,
         edges: &edges,
     };
     assert_eq!(
