@@ -825,3 +825,23 @@ fn required_certificate_profile_without_pki_validation_never_ready() {
                 .any(|gate| gate.validations.contains(&RemediationGate::ValidatePki))
     }));
 }
+
+
+#[test]
+fn tight_graph_budget_counts_all_systems_inside_multiple_sccs() {
+    let f=fixture(
+        &["a","b","c","d"],
+        &[("a","b"),("b","a"),("c","d"),("d","c")],
+        true,None
+    );
+    assert_eq!(f.topology.units().len(),2);
+    assert_eq!(f.topology.units().iter().map(|u|u.system_ids.len()).sum::<usize>(),4);
+    let q=request(&f,2,2,&[]);
+    let tight=Limits{max_graph_nodes:3,..Limits::default()};
+    assert_eq!(WavePlanner::plan(
+        &f.topology,&f.remediation,&f.target,&q,&tight,
+    ).unwrap_err().code,DiagnosticCode::ResourceLimitExceeded);
+    let normal=plan(&f,2,2,&[]);
+    assert_eq!(normal.waves().len(),2);
+    assert!(normal.waves().iter().all(|w|w.occupied_system_slots==2));
+}
