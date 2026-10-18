@@ -292,9 +292,8 @@ fn duplicate_records_or_missing_source_evidence_rejected() {
         DiagnosticCode::MissingProvenance
     );
     let mut input = result(&t);
-    input.decisions[0]
-        .evidence
-        .push(input.decisions[0].evidence[0].clone());
+    let duplicate_evidence = input.decisions[0].evidence[0].clone();
+    input.decisions[0].evidence.push(duplicate_evidence);
     assert_eq!(
         NeutralPolicyReview::new(input, &t, &Limits::default())
             .unwrap_err()
