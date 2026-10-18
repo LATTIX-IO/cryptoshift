@@ -59,6 +59,14 @@ jobs:
           grep -Fq "blockers:" <<< "$output"
           grep -Fq "proposed actions:" <<< "$output"
           grep -Fq "No changes have been executed" <<< "$output"
+      - name: Standalone offline wave planning acceptance
+        shell: bash
+        run: |
+          output=$(cargo run -p cryptoshift --example wave_plan --locked)
+          printf '%s\n' "$output"
+          grep -Fq "candidate waves: 1" <<< "$output"
+          grep -Fq "readiness: Unverified" <<< "$output"
+          grep -Fq "not an authorization to execute" <<< "$output"
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
