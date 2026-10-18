@@ -1,5 +1,6 @@
 //! Independent neutral-policy fixture conformance: no Permit -> authorization.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)] // Bounded synthetic fixture assertions.
 use cryptoshift::*;
 
 const AT: i64 = 1_800_000_000;
