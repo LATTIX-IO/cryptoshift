@@ -206,6 +206,53 @@ impl NeutralInventoryAdapter {
                 ));
             }
         }
+        // Reject oversized borrowed graph fields *before* cloning them.
+        // Node/edge counts alone cannot bound an individual node's reference
+        // list or an attacker-controlled identifier's allocation size.
+        let mut reference_count = 0_usize;
+        let mut input_bytes = limits.checked_add(
+            ResourceKind::InputBytes,
+            input.inventory.payload.len(),
+            input.producer_id.len(),
+        )?;
+        for value in [input.producer_revision, input.scope_id] {
+            input_bytes =
+                limits.checked_add(ResourceKind::InputBytes, input_bytes, value.len())?;
+        }
+        for node in input.nodes {
+            identifier(&node.id, "neutral_graph_node")?;
+            input_bytes =
+                limits.checked_add(ResourceKind::InputBytes, input_bytes, node.id.len())?;
+            if let Some(observation_id) = &node.observation_id {
+                identifier(observation_id, "neutral_graph_observation")?;
+                input_bytes = limits.checked_add(
+                    ResourceKind::InputBytes, input_bytes, observation_id.len(),
+                )?;
+            }
+            reference_count = limits.checked_add(
+                ResourceKind::GraphEdges, reference_count, node.evidence_ids.len(),
+            )?;
+            for id in &node.evidence_ids {
+                identifier(id, "neutral_node_evidence")?;
+                input_bytes =
+                    limits.checked_add(ResourceKind::InputBytes, input_bytes, id.len())?;
+            }
+        }
+        for edge in input.edges {
+            for value in [&edge.from, &edge.to] {
+                identifier(value, "neutral_graph_edge")?;
+                input_bytes =
+                    limits.checked_add(ResourceKind::InputBytes, input_bytes, value.len())?;
+            }
+            reference_count = limits.checked_add(
+                ResourceKind::GraphEdges, reference_count, edge.evidence_ids.len(),
+            )?;
+            for id in &edge.evidence_ids {
+                identifier(id, "neutral_edge_evidence")?;
+                input_bytes =
+                    limits.checked_add(ResourceKind::InputBytes, input_bytes, id.len())?;
+            }
+        }
         let graph = EvidenceGraph::new(
             &inventory,
             input.nodes.to_vec(),
@@ -467,7 +514,7 @@ impl NeutralChangeSet {
                         && claim
                             .evidence_ids
                             .iter()
-                            .all(|id| o.evidence_ids.contains(id))
+                            .all(|id| o.evidence_ids.binary_search(id).is_ok())
                 }),
                 NeutralChangeKind::ObservationModified => observation.is_some_and(|o| {
                     o.asset_id == claim.asset_id
@@ -477,7 +524,7 @@ impl NeutralChangeSet {
                         && claim
                             .evidence_ids
                             .iter()
-                            .all(|id| o.evidence_ids.contains(id))
+                            .all(|id| o.evidence_ids.binary_search(id).is_ok())
                 }),
                 NeutralChangeKind::ObservationConflicted => observation.is_some_and(|o| {
                     o.asset_id == claim.asset_id
@@ -485,7 +532,7 @@ impl NeutralChangeSet {
                         && claim
                             .evidence_ids
                             .iter()
-                            .all(|id| o.evidence_ids.contains(id))
+                            .all(|id| o.evidence_ids.binary_search(id).is_ok())
                 }),
                 NeutralChangeKind::TentativeAbsent | NeutralChangeKind::ConfirmedAbsent => {
                     if claim.observation_id.is_some() {
