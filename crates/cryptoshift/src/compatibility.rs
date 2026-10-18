@@ -487,7 +487,8 @@ impl CompatibilityAnalyzer {
                 "input content identity mismatches a caller-pinned digest",
             ));
         }
-        if request.scope_id != target.content().scope_id
+        if request.scope_id != graph.source_scope_id()
+            || request.scope_id != target.content().scope_id
             || request.scope_id != initiator_catalog.content().scope_id
             || request.scope_id != responder_catalog.content().scope_id
         {
