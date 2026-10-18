@@ -214,10 +214,6 @@ fn plan(f: &Fixture, capacity: usize, max_waves: usize, review: &[&str]) -> Wave
     .unwrap()
 }
 
-fn unit<'a>(p: &'a WavePlanDraft, id: &str) -> &'a UnitReadiness {
-    p.readiness().iter().find(|v| v.unit_id == id).unwrap()
-}
-
 fn catalog(provider: &str, version: &str) -> CapabilityCatalog {
     CapabilityCatalog::new(
         CapabilityCatalogDraft {
