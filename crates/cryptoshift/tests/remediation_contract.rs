@@ -304,10 +304,23 @@ fn missing_owner_and_dependency_are_never_silently_cleared() {
     assert!(!gate_b.prerequisite_action_ids.contains(&gate_a.id));
     assert!(gate_a.change_approval_required);
     assert_eq!(gate_a.source_bindings, report.bindings());
-    assert!(report.blockers().iter().all(|b|b.source_bindings==report.bindings()));
-    assert!(report.actions().iter().all(|a|a.source_bindings==report.bindings()));
+    assert!(
+        report
+            .blockers()
+            .iter()
+            .all(|b| b.source_bindings == report.bindings())
+    );
+    assert!(
+        report
+            .actions()
+            .iter()
+            .all(|a| a.source_bindings == report.bindings())
+    );
     assert_eq!(gate_a.rollback, RollbackRequirement::ReviewedPlanRequired);
-    assert_eq!(gate_a.maintenance, MaintenanceRequirement::ReviewedWindowRequired);
+    assert_eq!(
+        gate_a.maintenance,
+        MaintenanceRequirement::ReviewedWindowRequired
+    );
     assert_eq!(
         report.bindings().inventory_digest,
         f.inventory.export(&Limits::default()).unwrap().digest
@@ -771,67 +784,100 @@ fn frozen_v1_remediation_report_digest_and_length() {
     );
 }
 
-
 #[test]
 fn two_qualified_sources_may_share_evidence_id_without_merging_identity() {
     let f = fixture(true, false);
-    let make_link = |source: &str| CompatibilityObservation::PeerLink(PeerLinkObservation {
-        source: CompatibilitySource {
-            source_id: source.into(),
-            evidence_id: "shared-evidence".into(),
-            source_revision: "revision-1".into(),
-            observed_at_unix_secs: NOW - 1,
-            expires_at_unix_secs: Some(NOW + 10),
-            verification_reference: None, artifact_digest: None,
-        },
-        scope_id: "tenant-a".into(),
-        initiator_node_id: "a".into(),
-        responder_node_id: "b".into(),
-        protocol_id: "protocol".into(),
-        protocol_revision: "r1".into(),
-    });
+    let make_link = |source: &str| {
+        CompatibilityObservation::PeerLink(PeerLinkObservation {
+            source: CompatibilitySource {
+                source_id: source.into(),
+                evidence_id: "shared-evidence".into(),
+                source_revision: "revision-1".into(),
+                observed_at_unix_secs: NOW - 1,
+                expires_at_unix_secs: Some(NOW + 10),
+                verification_reference: None,
+                artifact_digest: None,
+            },
+            scope_id: "tenant-a".into(),
+            initiator_node_id: "a".into(),
+            responder_node_id: "b".into(),
+            protocol_id: "protocol".into(),
+            protocol_revision: "r1".into(),
+        })
+    };
     let compat = peer_analysis_with_observations(
-        &f, false, vec![make_link("auditor-1"), make_link("auditor-2")]
+        &f,
+        false,
+        vec![make_link("auditor-1"), make_link("auditor-2")],
     );
     let report = run(&f, &[&compat]).unwrap();
-    let refs:Vec<_> = report.blockers().iter()
-        .filter(|blocker|blocker.code==BlockerCode::PeerProofUnverified)
-        .flat_map(|blocker|blocker.evidence.iter()).collect();
-    assert!(refs.iter().any(|item|matches!(item,
+    let refs: Vec<_> = report
+        .blockers()
+        .iter()
+        .filter(|blocker| blocker.code == BlockerCode::PeerProofUnverified)
+        .flat_map(|blocker| blocker.evidence.iter())
+        .collect();
+    assert!(refs.iter().any(|item| matches!(item,
         RemediationEvidence::Compatibility{source_id,evidence_id,..}
         if source_id=="auditor-1" && evidence_id=="shared-evidence")));
-    assert!(refs.iter().any(|item|matches!(item,
+    assert!(refs.iter().any(|item| matches!(item,
         RemediationEvidence::Compatibility{source_id,evidence_id,..}
         if source_id=="auditor-2" && evidence_id=="shared-evidence")));
 }
 
 #[test]
 fn reordered_equivalent_risk_references_do_not_rotate_export() {
-    let mut f=fixture(true,false);
+    let mut f = fixture(true, false);
     f.risk.units[0].factors[0].assessment_references =
-        vec!["assessment-b".into(),"assessment-a".into()];
-    let initial=run(&f,&[]).unwrap();
+        vec!["assessment-b".into(), "assessment-a".into()];
+    let initial = run(&f, &[]).unwrap();
     f.risk.units[0].factors[0].assessment_references.reverse();
-    let reordered=run(&f,&[]).unwrap();
-    assert_eq!(initial.digest(),reordered.digest());
-    assert_eq!(initial.export(&Limits::default()).unwrap(),
-        reordered.export(&Limits::default()).unwrap());
+    let reordered = run(&f, &[]).unwrap();
+    assert_eq!(initial.digest(), reordered.digest());
+    assert_eq!(
+        initial.export(&Limits::default()).unwrap(),
+        reordered.export(&Limits::default()).unwrap()
+    );
 }
 
 #[test]
 fn duplicate_risk_claims_and_oversized_combined_evidence_are_rejected() {
-    let mut f=fixture(true,false);
+    let mut f = fixture(true, false);
     f.risk.units[0].factors[0].assessment_references =
-        vec!["assessment-1".into(),"assessment-1".into()];
-    let pinned=bindings(&f);
-    assert_eq!(RemediationAnalyzer::analyze(&f.inventory,&f.graph,&f.topology,
-        &f.risk,&f.target,&[],pinned,&Limits::default()).unwrap_err().code,
-        DiagnosticCode::DuplicateRecord);
+        vec!["assessment-1".into(), "assessment-1".into()];
+    let pinned = bindings(&f);
+    assert_eq!(
+        RemediationAnalyzer::analyze(
+            &f.inventory,
+            &f.graph,
+            &f.topology,
+            &f.risk,
+            &f.target,
+            &[],
+            pinned,
+            &Limits::default()
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::DuplicateRecord
+    );
     f.risk.units[0].factors[0].assessment_references.clear();
-    let compat=peer_analysis(&f,false);
-    let mut caps=Limits::default();
-    caps.max_evidence_records=1;
-    assert_eq!(RemediationAnalyzer::analyze(&f.inventory,&f.graph,&f.topology,
-        &f.risk,&f.target,&[&compat],bindings(&f),&caps).unwrap_err().code,
-        DiagnosticCode::ResourceLimitExceeded);
+    let compat = peer_analysis(&f, false);
+    let mut caps = Limits::default();
+    caps.max_evidence_records = 1;
+    assert_eq!(
+        RemediationAnalyzer::analyze(
+            &f.inventory,
+            &f.graph,
+            &f.topology,
+            &f.risk,
+            &f.target,
+            &[&compat],
+            bindings(&f),
+            &caps
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
 }

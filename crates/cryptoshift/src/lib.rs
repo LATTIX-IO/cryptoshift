@@ -93,8 +93,8 @@ pub use compatibility::{
 
 // Advisory, digest-bound migration blocker and action planning (FOSS-441).
 pub use remediation::{
-    BlockerCode, BlockerEvidenceState, BlockerFinding, BlockerSeverity,
+    BlockerCode, BlockerEvidenceState, BlockerFinding, BlockerSeverity, MaintenanceRequirement,
     REMEDIATION_ANALYSIS_VERSION, RemediationAction, RemediationActionKind, RemediationAnalysis,
     RemediationAnalyzer, RemediationBindings, RemediationEvidence, RemediationGate,
-    MaintenanceRequirement, RemediationOwner, RollbackRequirement,
+    RemediationOwner, RollbackRequirement,
 };

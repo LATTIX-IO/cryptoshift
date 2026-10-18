@@ -451,20 +451,28 @@ impl RemediationAnalyzer {
         for unit in &risk.units {
             for factor in &unit.factors {
                 referenced = limits.checked_add(
-                    ResourceKind::EvidenceRecords, referenced, factor.inventory_evidence_ids.len()
+                    ResourceKind::EvidenceRecords,
+                    referenced,
+                    factor.inventory_evidence_ids.len(),
                 )?;
                 referenced = limits.checked_add(
-                    ResourceKind::EvidenceRecords, referenced, factor.assessment_references.len()
+                    ResourceKind::EvidenceRecords,
+                    referenced,
+                    factor.assessment_references.len(),
                 )?;
             }
         }
         for analysis in compatibilities {
             referenced = limits.checked_add(
-                ResourceKind::EvidenceRecords, referenced, analysis.evidence_refs().len()
+                ResourceKind::EvidenceRecords,
+                referenced,
+                analysis.evidence_refs().len(),
             )?;
             for finding in analysis.findings() {
                 referenced = limits.checked_add(
-                    ResourceKind::EvidenceRecords, referenced, finding.evidence_refs.len()
+                    ResourceKind::EvidenceRecords,
+                    referenced,
+                    finding.evidence_refs.len(),
                 )?;
             }
         }
@@ -573,14 +581,24 @@ impl RemediationAnalyzer {
                 ));
             }
             for factor in &unit.factors {
-                if factor.inventory_evidence_ids.iter().collect::<BTreeSet<_>>().len()
+                if factor
+                    .inventory_evidence_ids
+                    .iter()
+                    .collect::<BTreeSet<_>>()
+                    .len()
                     != factor.inventory_evidence_ids.len()
-                    || factor.assessment_references.iter().collect::<BTreeSet<_>>().len()
+                    || factor
+                        .assessment_references
+                        .iter()
+                        .collect::<BTreeSet<_>>()
+                        .len()
                         != factor.assessment_references.len()
                 {
-                    return Err(problem(DiagnosticCode::DuplicateRecord,
+                    return Err(problem(
+                        DiagnosticCode::DuplicateRecord,
                         "remediation_risk_reference",
-                        "risk source reference cannot repeat inside one factor"));
+                        "risk source reference cannot repeat inside one factor",
+                    ));
                 }
                 for id in &factor.inventory_evidence_ids {
                     if !sources.contains_key(id.as_str()) {
