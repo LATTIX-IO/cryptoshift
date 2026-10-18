@@ -1223,3 +1223,62 @@ fn missing_certificate_chain_and_revocation_preserve_pki_residual_risk() {
                 .contains(&RemediationGate::ValidatePki)
     }));
 }
+
+
+#[test]
+fn shared_vendor_document_yields_independent_capability_facet_identities() {
+    let f = fixture(&["a"], &[], true, None);
+    let wave = plan(&f, 1, 1, &[]);
+    let original = catalog("vendor", "source-1");
+    let mut draft = original.content().clone();
+    let mut second = draft.records[0].clone();
+    second.record_id = "runtime-v2".into();
+    second.product_version = "v2".into();
+    // Two independently addressable capability claims cite one source record.
+    assert_eq!(second.evidence, draft.records[0].evidence);
+    draft.records.push(second);
+    let multi = CapabilityCatalog::new(draft, &Limits::default(), Some(NOW)).unwrap();
+    let plan = build(&f, &wave, &[&multi], None, vec![]);
+    let mut facets: Vec<_> = plan
+        .residual_risks()
+        .iter()
+        .filter(|item| item.kind == ResidualRiskKind::VendorCapability)
+        .collect();
+    facets.sort_by(|a, b| a.id.cmp(&b.id));
+    assert_eq!(facets.len(), 2);
+    assert_ne!(facets[0].id, facets[1].id);
+    assert_ne!(facets[0].subject, facets[1].subject);
+    assert!(facets.iter().all(|item| matches!(
+        item.subject,
+        Some(PlanFacetSubject::Capability { .. })
+    )));
+}
+
+#[test]
+fn shared_exception_justification_never_collapses_distinct_request_ids() {
+    let f = fixture(&["a"], &[], true, None);
+    let wave = plan(&f, 1, 1, &[]);
+    let first = proposal("exception-1");
+    let mut second = proposal("exception-2");
+    second.justification_reference = first.justification_reference.clone();
+    second.target_constraint_id = "transport".into();
+    assert_eq!(first.expires_at_unix_secs, second.expires_at_unix_secs);
+    let draft = build(&f, &wave, &[], None, vec![second, first]);
+    let facets: Vec<_> = draft
+        .residual_risks()
+        .iter()
+        .filter(|item| item.kind == ResidualRiskKind::ExceptionUnverified)
+        .collect();
+    assert_eq!(facets.len(), 2);
+    assert_ne!(facets[0].id, facets[1].id);
+    assert_ne!(facets[0].subject, facets[1].subject);
+    let subjects: Vec<_> = facets.iter().filter_map(|item| match &item.subject {
+        Some(PlanFacetSubject::Exception {
+            request_id,
+            target_constraint_id,
+        }) => Some((request_id.as_str(), target_constraint_id.as_str())),
+        _ => None,
+    }).collect();
+    assert!(subjects.contains(&("exception-1", KnownAlgorithm::MlKem1024.id())));
+    assert!(subjects.contains(&("exception-2", "transport")));
+}
