@@ -193,6 +193,8 @@ pub enum RollbackRequirement {
 /// Stable blocker bound to all source versions and exact migration-unit identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BlockerFinding {
+    /// Exact versioned source/input digests, independently inspectable per finding.
+    pub source_bindings: RemediationBindings,
     /// Full-content-derived stable ID.
     pub id: String,
     /// Indivisible topology migration-unit ID.
@@ -214,6 +216,8 @@ pub struct BlockerFinding {
 /// Deterministic advisory remediation, never an approved operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RemediationAction {
+    /// Exact versioned source/input digests, independently inspectable per action.
+    pub source_bindings: RemediationBindings,
     /// Digest-derived identity rotates with semantic input versions.
     pub id: String,
     /// Exact SCC migration unit.
@@ -938,6 +942,7 @@ impl RemediationAnalyzer {
                 .or_default()
                 .push(action_id.clone());
             actions.push(RemediationAction {
+                source_bindings: pinned,
                 id: action_id,
                 unit_id: unit_id.clone(),
                 kind: action_kind,
@@ -955,6 +960,7 @@ impl RemediationAnalyzer {
                 due_at_unix_secs: deadline_for(target, &unit_id),
             });
             blockers.push(BlockerFinding {
+                source_bindings: pinned,
                 id: blocker_id,
                 unit_id,
                 code,
@@ -1008,6 +1014,7 @@ impl RemediationAnalyzer {
                 )
             })?;
             actions.push(RemediationAction {
+                source_bindings: pinned,
                 id: unit_gate_ids.get(&unit.id).cloned().ok_or_else(|| {
                     problem(
                         DiagnosticCode::InvalidReference,
@@ -1458,6 +1465,7 @@ impl<'a> Encoder<'a> {
         Ok(())
     }
     fn blocker(&mut self, blocker: &BlockerFinding) -> Result<(), Diagnostic> {
+        self.bindings(blocker.source_bindings)?;
         self.string(&blocker.id)?;
         self.string(&blocker.unit_id)?;
         self.code(blocker.code)?;
@@ -1467,6 +1475,7 @@ impl<'a> Encoder<'a> {
         self.owner(&blocker.owner)
     }
     fn action(&mut self, action: &RemediationAction) -> Result<(), Diagnostic> {
+        self.bindings(action.source_bindings)?;
         self.string(&action.id)?;
         self.string(&action.unit_id)?;
         self.raw(&[action.kind as u8])?;
