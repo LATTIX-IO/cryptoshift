@@ -939,3 +939,32 @@ fn ambiguous_ownership_keeps_exact_inventory_provenance() {
         if evidence_id == "ev-1"
     )));
 }
+
+#[test]
+fn compatibility_on_one_peer_does_not_cover_another_scc_dependency() {
+    let mut f = fixture(true, false);
+    let mut nodes = f.graph.nodes().to_vec();
+    nodes.push(GraphNode {
+        id: "c".into(), kind: GraphNodeKind::System,
+        evidence_ids: vec!["ev-1".into()],
+        observation_id: None, observation_kind: None,
+    });
+    let mut edges = f.graph.edges().to_vec();
+    edges.push(GraphEdge {
+        from: "c".into(), to: "b".into(),
+        relation: GraphRelation::DependsOn, evidence_ids: vec!["ev-1".into()],
+    });
+    edges.push(GraphEdge {
+        from: "c".into(), to: "owner".into(),
+        relation: GraphRelation::OwnedBy, evidence_ids: vec!["ev-1".into()],
+    });
+    f.graph = EvidenceGraph::new(&f.inventory, nodes, edges, &Limits::default()).unwrap();
+    f.topology = DependencyAnalysis::analyze(&f.graph, &Limits::default()).unwrap();
+    f.risk = RiskAnalysis::analyze(
+        &f.inventory, &f.graph, &f.topology, &[], &[], None, &Limits::default()
+    ).unwrap();
+    let compat = peer_analysis(&f, false);
+    let report = run(&f, &[&compat]).unwrap();
+    assert!(!has(&report, "a", BlockerCode::PeerCompatibilityMissing));
+    assert!(has(&report, "c", BlockerCode::PeerCompatibilityMissing));
+}
