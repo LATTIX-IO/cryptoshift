@@ -96,7 +96,8 @@ pub enum BlockerCode {
     RiskElevated(RiskFactorKind),
     /// Compatibility report did not establish authenticated interoperability.
     PeerProofUnverified,
-    /// Exact runtime/peer analysis is missing for a declared dependency edge.
+    /// Reserved for future explicitly declared peer expectations; `DependsOn`
+    /// alone never triggers this code because it does not establish communication.
     PeerCompatibilityMissing,
     /// One typed, source-attributed compatibility contradiction or gap.
     Compatibility(CompatibilityCode),
@@ -946,38 +947,10 @@ impl RemediationAnalyzer {
                 }
             }
         }
-        // A report on some other peer of the same SCC cannot satisfy a
-        // dependent-to-prerequisite communication relationship. Walk graph
-        // edges once, bounded by the existing GraphEdges limit.
-        let mut missing_dependency_units = BTreeSet::new();
-        for edge in graph
-            .edges()
-            .iter()
-            .filter(|edge| edge.relation == GraphRelation::DependsOn)
-        {
-            let dependent = unit_by_system.get(edge.from.as_str()).ok_or_else(|| {
-                problem(
-                    DiagnosticCode::InvalidReference,
-                    "remediation_dependency_source",
-                    "dependency source must belong to an exact SCC",
-                )
-            })?;
-            let prerequisite = unit_by_system.get(edge.to.as_str()).ok_or_else(|| {
-                problem(
-                    DiagnosticCode::InvalidReference,
-                    "remediation_dependency_target",
-                    "dependency target must belong to an exact SCC",
-                )
-            })?;
-            let pair = if edge.from <= edge.to {
-                (edge.from.clone(), edge.to.clone())
-            } else {
-                (edge.to.clone(), edge.from.clone())
-            };
-            if dependent != prerequisite && !peers.contains_key(&pair) {
-                missing_dependency_units.insert((*dependent).to_owned());
-            }
-        }
+        // DependsOn is an operational prerequisite, not an observed cryptographic
+        // communication relationship. Do not invent peer/protocol or PKI
+        // verification demands from structural dependency edges.
+        // Explicit CompatibilityAnalysis records carry peer-specific claims.
         for arc in topology.prerequisites() {
             let source = arc
                 .evidence_ids
@@ -992,16 +965,6 @@ impl RemediationAnalyzer {
                 source,
                 RemediationGate::ValidatePrerequisite,
             );
-            if missing_dependency_units.contains(&arc.dependent_unit) {
-                push(
-                    &arc.dependent_unit,
-                    BlockerCode::PeerCompatibilityMissing,
-                    BlockerEvidenceState::Unknown,
-                    BlockerSeverity::Verification,
-                    vec![],
-                    RemediationGate::AuthenticatePeer,
-                );
-            }
         }
 
         limits.check(ResourceKind::Diagnostics, pending.len())?;
