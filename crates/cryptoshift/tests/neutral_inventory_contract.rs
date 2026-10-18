@@ -1,5 +1,6 @@
 //! External-public-API acceptance for independently versioned neutral fixtures.
 
+#![allow(clippy::unwrap_used, clippy::expect_used)] // Bounded synthetic fixture assertions.
 use cryptoshift::*;
 
 const NOW: i64 = 1_800_000_000;
