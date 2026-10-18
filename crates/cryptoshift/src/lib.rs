@@ -33,6 +33,9 @@ mod graph;
 mod inventory;
 mod inventory_codec;
 mod limits;
+mod neutral_codec;
+mod neutral_inventory;
+mod neutral_policy;
 mod plan;
 mod remediation;
 mod risk_analysis;
@@ -113,4 +116,18 @@ pub use plan::{
     MigrationPlanner, PlanAssessmentState, PlanCatalogPin, PlanChangeKind, PlanDiff,
     PlanEvidenceRef, PlanExceptionRecord, PlanExceptionRequest, PlanExceptionState,
     PlanFacetSubject, PlanScorePin, PlanSourcePins, ResidualRiskFacet, ResidualRiskKind,
+};
+
+// Versioned fixture-only neutral Cryptomap/Cryptopolicy handoff (FOSS-446).
+// Not a native integration with any pending upstream transport contract.
+pub use neutral_inventory::{
+    NEUTRAL_CHANGE_VERSION, NEUTRAL_INVENTORY_VERSION, NeutralChangeClaim,
+    NeutralChangeKind, NeutralChangeSet, NeutralChangeSetInput,
+    NeutralInventoryAdapter, NeutralInventoryInput, NeutralInventoryPins,
+    NeutralInventoryProjection,
+};
+pub use neutral_policy::{
+    NEUTRAL_POLICY_VERSION, NeutralPolicyDecision, NeutralPolicyEvidence,
+    NeutralPolicyGate, NeutralPolicyInput, NeutralPolicyOutcome,
+    NeutralPolicyReview,
 };
