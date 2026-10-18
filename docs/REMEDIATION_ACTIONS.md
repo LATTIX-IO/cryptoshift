@@ -8,7 +8,7 @@ Cryptoshift's Gate D1 creates **offline remediation proposals**, not migration e
 
 `RemediationAnalyzer::analyze(..., &[&CompatibilityAnalysis], pinned, limits)` validates exact graph/inventory/target/risk/topology context, the risk model version, SCC units, observed source evidence and optional compatibility peer node bindings. A compatibility report is bound to *both* participating SCCs. An unverified `Conditional` or `Transitional` result remains a blocker, never proof of mutual interoperability.
 
-`RemediationAnalysis` exposes immutable, stable `BlockerFinding` and nonexecuting `RemediationAction` lists, a complete input-digest record (also copied into each independently extractable blocker/action), bounded canonical bytes, and a SHA-256 export identifier. The writer uses `CSHIFT_REMEDIATION_REPORT_V1` domain separation. Finding and action identities rotate with content changes.
+`RemediationAnalysis` exposes immutable, stable `BlockerFinding` and nonexecuting `RemediationAction` lists, a complete input-digest record (also copied into each independently extractable blocker/action), bounded canonical bytes, and a SHA-256 export identifier. The writer uses `CSHIFT_REMEDIATION_REPORT_V1` domain separation. Finding and action identities rotate with content changes, including changes to *any* peer-compatibility artifact. Each finding and action also exposes `compatibility_set_digest` (domain-separated canonical SHA-256 over the sorted FOSS-438 report identities) so a downstream planner cannot reuse a prior action receipt against a revised evidence set.
 
 ## Blockers, provenance and ownership
 
