@@ -741,6 +741,12 @@ impl RemediationAnalyzer {
                 .or_default()
                 .extend(edge.evidence_ids.iter().map(String::as_str));
         }
+        // Index risk vectors once; avoid one linear risk-report scan per SCC.
+        let risk_by_unit: BTreeMap<&str, &crate::UnitRiskVector> = risk
+            .units
+            .iter()
+            .map(|unit| (unit.unit_id.as_str(), unit))
+            .collect();
         let mut owner_by_unit = BTreeMap::<String, RemediationOwner>::new();
         let mut owner_evidence_by_unit = BTreeMap::<String, Vec<RemediationEvidence>>::new();
         for unit in topology.units() {
@@ -827,17 +833,13 @@ impl RemediationAnalyzer {
                 ),
                 RemediationOwner::Claimed(_) => {}
             }
-            let risk_unit = risk
-                .units
-                .iter()
-                .find(|v| v.unit_id == unit.id)
-                .ok_or_else(|| {
-                    problem(
-                        DiagnosticCode::InvalidReference,
-                        "remediation_risk_unit",
-                        "missing required topology risk vector",
-                    )
-                })?;
+            let risk_unit = risk_by_unit.get(unit.id.as_str()).copied().ok_or_else(|| {
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_risk_unit",
+                    "missing required topology risk vector",
+                )
+            })?;
             for factor in &risk_unit.factors {
                 let mut refs = Vec::new();
                 for id in &factor.inventory_evidence_ids {
@@ -1094,13 +1096,16 @@ impl RemediationAnalyzer {
                 ),
             );
         }
+        let mut arcs_by_dependent = BTreeMap::<&str, Vec<&crate::PrerequisiteArc>>::new();
+        for arc in topology.prerequisites() {
+            arcs_by_dependent
+                .entry(arc.dependent_unit.as_str())
+                .or_default()
+                .push(arc);
+        }
         for unit in topology.units() {
             let mut before = own_action_ids.remove(&unit.id).unwrap_or_default();
-            for arc in topology
-                .prerequisites()
-                .iter()
-                .filter(|arc| arc.dependent_unit == unit.id)
-            {
+            for arc in arcs_by_dependent.get(unit.id.as_str()).into_iter().flatten() {
                 let upstream = unit_gate_ids.get(&arc.prerequisite_unit).ok_or_else(|| {
                     problem(
                         DiagnosticCode::InvalidReference,
