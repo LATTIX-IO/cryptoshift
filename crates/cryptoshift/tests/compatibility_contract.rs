@@ -345,7 +345,6 @@ fn duplicate_source_namespaces_and_oversized_limits_are_rejected() {
     );
 }
 
-
 fn with_certificate(target: &TargetProfile, request: &mut CompatibilityRequest) -> TargetProfile {
     let mut draft = target.content().clone();
     draft.standards.push(StandardEdition::Fips204_2024);
@@ -418,8 +417,16 @@ fn certificate_and_chain_evidence_remain_untrusted_even_when_claimed_valid() {
     req.observations = vec![link(), hand, pki()];
     let report = analyze(&g, &target, &l, &r, &req).unwrap();
     assert_eq!(report.status(), CompatibilityStatus::Conditional);
-    assert!(report.prerequisites().contains(&CompatibilityPrerequisite::VerifyPki));
-    assert!(report.prerequisites().contains(&CompatibilityPrerequisite::VerifyNegotiation));
+    assert!(
+        report
+            .prerequisites()
+            .contains(&CompatibilityPrerequisite::VerifyPki)
+    );
+    assert!(
+        report
+            .prerequisites()
+            .contains(&CompatibilityPrerequisite::VerifyNegotiation)
+    );
     assert!(has(&report, CompatibilityCode::PkiUnverified));
     assert!(!has(&report, CompatibilityCode::PkiMismatch));
 }
@@ -487,8 +494,16 @@ fn hybrid_is_only_transitional_with_named_combiner_and_peer_binding() {
     req.observations = vec![link(), hand];
     let report = analyze(&g, &target, &l, &r, &req).unwrap();
     assert_eq!(report.status(), CompatibilityStatus::Transitional);
-    assert!(report.prerequisites().contains(&CompatibilityPrerequisite::VerifyHybrid));
-    assert!(report.prerequisites().contains(&CompatibilityPrerequisite::VerifyNegotiation));
+    assert!(
+        report
+            .prerequisites()
+            .contains(&CompatibilityPrerequisite::VerifyHybrid)
+    );
+    assert!(
+        report
+            .prerequisites()
+            .contains(&CompatibilityPrerequisite::VerifyNegotiation)
+    );
 
     if let CompatibilityObservation::Negotiation(ref mut obs) = req.observations[1] {
         obs.hybrid_combiner_reference = Some("unreviewed-combiner".into());
@@ -530,8 +545,18 @@ fn contradictory_negotiation_sources_preserve_both_namespaces() {
     assert_eq!(report.status(), CompatibilityStatus::Unknown);
     assert!(has(&report, CompatibilityCode::EvidenceConflict));
     assert!(has(&report, CompatibilityCode::NegotiationMismatch));
-    assert!(report.evidence_refs().iter().any(|ref_| ref_.source_id == "monitor" && ref_.evidence_id == "handshake"));
-    assert!(report.evidence_refs().iter().any(|ref_| ref_.source_id == "other-monitor" && ref_.evidence_id == "handshake"));
+    assert!(
+        report
+            .evidence_refs()
+            .iter()
+            .any(|ref_| ref_.source_id == "monitor" && ref_.evidence_id == "handshake")
+    );
+    assert!(
+        report
+            .evidence_refs()
+            .iter()
+            .any(|ref_| ref_.source_id == "other-monitor" && ref_.evidence_id == "handshake")
+    );
 }
 
 #[test]
@@ -554,7 +579,10 @@ fn equivalent_renegotiation_offer_order_is_canonical_but_duplicates_fail() {
     if let CompatibilityObservation::Negotiation(ref mut item) = req.observations[1] {
         item.responder_offers.push(KnownAlgorithm::MlKem1024);
     }
-    assert_eq!(analyze(&g, &t, &l, &r, &req).unwrap_err().code, DiagnosticCode::DuplicateRecord);
+    assert_eq!(
+        analyze(&g, &t, &l, &r, &req).unwrap_err().code,
+        DiagnosticCode::DuplicateRecord
+    );
 }
 
 #[test]
@@ -575,26 +603,43 @@ fn report_output_and_diagnostics_are_bounded_before_commit() {
     req.observations = vec![link(), negotiation()];
     let result = analyze(&g, &t, &l, &r, &req).unwrap();
     let bytes = result.export(&limits()).unwrap();
-    assert_eq!(SnapshotDigest::from_bytes(result.digest().as_bytes()), result.digest());
+    assert_eq!(
+        SnapshotDigest::from_bytes(result.digest().as_bytes()),
+        result.digest()
+    );
     let mut caps = limits();
     caps.max_export_bytes = bytes.len() - 1;
     let err = CompatibilityAnalyzer::analyze(&req, &g, &t, &l, &r, TIME, &caps).unwrap_err();
     assert_eq!(err.code, DiagnosticCode::ResourceLimitExceeded);
     let mut caps = limits();
     caps.max_diagnostics = 1;
-    assert_eq!(CompatibilityAnalyzer::analyze(&req, &g, &t, &l, &r, TIME, &caps).unwrap_err().code, DiagnosticCode::ResourceLimitExceeded);
+    assert_eq!(
+        CompatibilityAnalyzer::analyze(&req, &g, &t, &l, &r, TIME, &caps)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
 }
 
 #[test]
 fn invalid_role_and_stale_target_or_catalog_claims_fail_closed() {
     let (g, t, l, r, mut req) = fixture();
     req.role = AlgorithmRole::Signature;
-    assert_eq!(analyze(&g, &t, &l, &r, &req).unwrap_err().code, DiagnosticCode::InvalidStateTransition);
+    assert_eq!(
+        analyze(&g, &t, &l, &r, &req).unwrap_err().code,
+        DiagnosticCode::InvalidStateTransition
+    );
     req.role = AlgorithmRole::KeyEncapsulation;
-    let stale_catalog = CompatibilityAnalyzer::analyze(&req, &g, &t, &l, &r, TIME + 301, &limits()).unwrap();
+    let stale_catalog =
+        CompatibilityAnalyzer::analyze(&req, &g, &t, &l, &r, TIME + 301, &limits()).unwrap();
     assert_eq!(stale_catalog.status(), CompatibilityStatus::Unknown);
     assert!(has(&stale_catalog, CompatibilityCode::CapabilityStale));
-    assert_eq!(CompatibilityAnalyzer::analyze(&req, &g, &t, &l, &r, TIME + 501, &limits()).unwrap_err().code, DiagnosticCode::StaleCriticalProfile);
+    assert_eq!(
+        CompatibilityAnalyzer::analyze(&req, &g, &t, &l, &r, TIME + 501, &limits())
+            .unwrap_err()
+            .code,
+        DiagnosticCode::StaleCriticalProfile
+    );
 }
 
 #[test]
@@ -605,9 +650,11 @@ fn frozen_v1_compatibility_export_digest_and_length() {
     let bytes = report.export(&limits()).unwrap();
     assert!(bytes.starts_with(b"CSHIFT_COMPATIBILITY_V1"));
     let observed = format!("{} {}", report.digest().as_identifier(), bytes.len());
-    assert_eq!(observed, include_str!("fixtures/compatibility_v1.sha256").trim());
+    assert_eq!(
+        observed,
+        include_str!("fixtures/compatibility_v1.sha256").trim()
+    );
 }
-
 
 fn graph_for_scope(scope: &str, with_dependency: bool) -> EvidenceGraph {
     let l = limits();

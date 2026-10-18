@@ -1258,18 +1258,32 @@ trait ByteSink {
     fn extend_from_slice(&mut self, bytes: &[u8]);
 }
 impl ByteSink for Vec<u8> {
-    fn push(&mut self, byte: u8) { Vec::push(self, byte); }
-    fn extend_from_slice(&mut self, bytes: &[u8]) { Vec::extend_from_slice(self, bytes); }
+    fn push(&mut self, byte: u8) {
+        Vec::push(self, byte);
+    }
+    fn extend_from_slice(&mut self, bytes: &[u8]) {
+        Vec::extend_from_slice(self, bytes);
+    }
 }
 impl<W: ByteSink + ?Sized> ByteSink for &mut W {
-    fn push(&mut self, byte: u8) { ByteSink::push(*self, byte); }
-    fn extend_from_slice(&mut self, bytes: &[u8]) { ByteSink::extend_from_slice(*self, bytes); }
+    fn push(&mut self, byte: u8) {
+        ByteSink::push(*self, byte);
+    }
+    fn extend_from_slice(&mut self, bytes: &[u8]) {
+        ByteSink::extend_from_slice(*self, bytes);
+    }
 }
 #[derive(Default)]
-struct SizeSink { len: usize }
+struct SizeSink {
+    len: usize,
+}
 impl ByteSink for SizeSink {
-    fn push(&mut self, _: u8) { self.len = self.len.saturating_add(1); }
-    fn extend_from_slice(&mut self, bytes: &[u8]) { self.len = self.len.saturating_add(bytes.len()); }
+    fn push(&mut self, _: u8) {
+        self.len = self.len.saturating_add(1);
+    }
+    fn extend_from_slice(&mut self, bytes: &[u8]) {
+        self.len = self.len.saturating_add(bytes.len());
+    }
 }
 
 fn str_field<W: ByteSink>(output: &mut W, value: &str) {
@@ -1388,10 +1402,32 @@ fn encode_report(
 ) -> Result<Vec<u8>, Diagnostic> {
     // Two-pass exact size admission prevents allocating oversized output.
     let mut size = SizeSink::default();
-    write_report(&mut size, request, observations, bindings, status, findings, prerequisites, left, right, evidence_refs);
+    write_report(
+        &mut size,
+        request,
+        observations,
+        bindings,
+        status,
+        findings,
+        prerequisites,
+        left,
+        right,
+        evidence_refs,
+    );
     limits.check(ResourceKind::ExportBytes, size.len)?;
     let mut bytes = Vec::with_capacity(size.len);
-    write_report(&mut bytes, request, observations, bindings, status, findings, prerequisites, left, right, evidence_refs);
+    write_report(
+        &mut bytes,
+        request,
+        observations,
+        bindings,
+        status,
+        findings,
+        prerequisites,
+        left,
+        right,
+        evidence_refs,
+    );
     debug_assert_eq!(bytes.len(), size.len);
     Ok(bytes)
 }

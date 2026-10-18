@@ -5,7 +5,11 @@ use cryptoshift::*;
 
 const NOW: i64 = 1_800_000_000;
 
-fn catalog(provider: &str, runtime: &str, limits: &Limits) -> Result<CapabilityCatalog, Diagnostic> {
+fn catalog(
+    provider: &str,
+    runtime: &str,
+    limits: &Limits,
+) -> Result<CapabilityCatalog, Diagnostic> {
     CapabilityCatalog::new(
         CapabilityCatalogDraft {
             schema_version: CAPABILITY_CATALOG_VERSION,
@@ -166,13 +170,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let result = CompatibilityAnalyzer::analyze(
-        &request,
-        &graph,
-        &target,
-        &initiator,
-        &responder,
-        NOW,
-        &limits,
+        &request, &graph, &target, &initiator, &responder, NOW, &limits,
     )?;
     if result.status() != CompatibilityStatus::Unknown {
         return Err("a missing peer link and handshake must never establish compatibility".into());
