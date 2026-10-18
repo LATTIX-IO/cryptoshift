@@ -467,6 +467,8 @@ impl MigrationPlanner {
     ///
     /// No source pin, exception request or signed-looking receipt automatically
     /// discharges one D1/D2 gate or upgrades a unit to operational Ready.
+    // Kept explicit to expose each independent evidence trust boundary to callers.
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         topology: &DependencyTopology,
         remediation: &RemediationAnalysis,
@@ -778,14 +780,22 @@ impl MigrationPlanner {
         limits.check(ResourceKind::Diagnostics, facets.len())?;
         limits.check(ResourceKind::PlanActions, facets.len())?;
         // Domain-separated per-facet identifiers bind all original revisions.
+        let mut exception_encoder = Encoder::new(limits);
+        exception_encoder.raw(b"CSHIFT_EXCEPTION_SET_D3_V1")?;
+        exception_encoder.count(exceptions.len())?;
+        for exception in &exceptions {
+            exception_encoder.exception(exception)?;
+        }
+        let exception_set_digest = SnapshotDigest::hash(&exception_encoder.finish());
         for facet in &mut facets {
             facet.evidence.sort();
             facet.validation_gates.sort();
             let mut writer = Encoder::new(limits);
             writer.raw(b"CSHIFT_RESIDUAL_FACET_D3_V1")?;
-            writer.digest(current.wave_digest)?;
-            writer.digest(current.remediation_digest)?;
-            writer.digest(current.compatibility_set_digest)?;
+            // A facet extracted from a revised catalog, score profile,
+            // exception set, or upstream proof must never retain a stale ID.
+            writer.pins(&current)?;
+            writer.digest(exception_set_digest)?;
             writer.facet(facet)?;
             facet.id = SnapshotDigest::hash(&writer.finish()).as_identifier();
         }
@@ -1041,11 +1051,12 @@ impl MigrationPlanDraft {
             budget,
             next.residual_risks.len(),
         )?;
-        limits.checked_add(
+        let exceptions = limits.checked_add(
             ResourceKind::PlannerCandidates,
-            budget,
-            self.exceptions.len() + next.exceptions.len(),
+            self.exceptions.len(),
+            next.exceptions.len(),
         )?;
+        limits.checked_add(ResourceKind::PlannerCandidates, budget, exceptions)?;
         let mut changes = BTreeSet::new();
         let a = &self.pins;
         let b = &next.pins;
