@@ -128,29 +128,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     // This is a synthetic, non-authenticated example. Production consumers
     // obtain and validate expected SHA-256 source pins independently.
-    let expected_pins=MigrationPlanner::input_pins(
-        &topology,&report,&draft,&target,&[],None,&limits
-    )?;
-    let input=MigrationPlanRequest{
-        schema_version:MIGRATION_PLAN_VERSION,
+    let expected_pins =
+        MigrationPlanner::input_pins(&topology, &report, &draft, &target, &[], None, &limits)?;
+    let input = MigrationPlanRequest {
+        schema_version: MIGRATION_PLAN_VERSION,
         expected_pins,
-        exceptions:vec![],
+        exceptions: vec![],
     };
-    let plan=MigrationPlanner::build(
-        &topology,&report,&draft,&target,&[],None,&input,&limits
+    let plan = MigrationPlanner::build(
+        &topology,
+        &report,
+        &draft,
+        &target,
+        &[],
+        None,
+        &input,
+        &limits,
     )?;
-    if plan.status()!=PlanAssessmentState::Partial
+    if plan.status() != PlanAssessmentState::Partial
         || plan.residual_risks().is_empty()
-        || !plan.residual_risks().iter()
-            .any(|risk|risk.kind==ResidualRiskKind::ChangeApproval)
-        || !plan.residual_risks().iter()
-            .any(|risk|risk.kind==ResidualRiskKind::MissingCapabilityEvidence)
+        || !plan
+            .residual_risks()
+            .iter()
+            .any(|risk| risk.kind == ResidualRiskKind::ChangeApproval)
+        || !plan
+            .residual_risks()
+            .iter()
+            .any(|risk| risk.kind == ResidualRiskKind::MissingCapabilityEvidence)
     {
         return Err("an unowned system may not be declared authorized or complete".into());
     }
-    println!("migration plan state: {:?}",plan.status());
-    println!("residual risk facets: {}",plan.residual_risks().len());
-    println!("migration plan digest: {}",plan.digest().as_identifier());
+    println!("migration plan state: {:?}", plan.status());
+    println!("residual risk facets: {}", plan.residual_risks().len());
+    println!("migration plan digest: {}", plan.digest().as_identifier());
     println!("candidate waves: {}", draft.waves().len());
     println!("readiness: {:?}", draft.readiness()[0].status);
     println!("wave digest: {}", draft.digest().as_identifier());
