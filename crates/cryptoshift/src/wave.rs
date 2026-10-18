@@ -261,7 +261,9 @@ impl WavePlanner {
         let mut system_count = 0_usize;
         for unit in topology.units() {
             system_count = limits.checked_add(
-                ResourceKind::GraphNodes, system_count, unit.system_ids.len(),
+                ResourceKind::GraphNodes,
+                system_count,
+                unit.system_ids.len(),
             )?;
         }
         limits.check(ResourceKind::GraphEdges, topology.prerequisites().len())?;
