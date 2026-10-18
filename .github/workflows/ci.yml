@@ -43,10 +43,35 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Test
         run: cargo test --workspace --all-features --locked
+      - name: Standalone offline peer compatibility acceptance
+        shell: bash
+        run: |
+          output=$(cargo run -p cryptoshift --example peer_compatibility --locked)
+          printf '%s\n' "$output"
+          grep -Fq "status: Unknown" <<< "$output"
+          grep -Fq "NegotiationMissing" <<< "$output"
+          grep -Fq "No protocol negotiation was authenticated" <<< "$output"
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --all-features --no-deps --locked
+
+  msrv:
+    name: Rust 1.85 MSRV
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install declared minimum Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: 1.85.0
+      - name: Check public API and all targets on MSRV
+        run: cargo +1.85.0 check --workspace --all-targets --all-features --locked
+      - name: Test on MSRV
+        run: cargo +1.85.0 test --workspace --all-features --locked
 
   supply-chain:
     name: Supply chain and SemVer

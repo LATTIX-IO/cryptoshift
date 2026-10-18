@@ -116,6 +116,7 @@ pub struct GraphEdge {
 #[derive(Clone, Debug)]
 pub struct EvidenceGraph {
     source_digest: SnapshotDigest,
+    source_scope_id: String,
     nodes: Vec<GraphNode>,
     edges: Vec<GraphEdge>,
 }
@@ -278,6 +279,7 @@ impl EvidenceGraph {
         });
         Ok(Self {
             source_digest,
+            source_scope_id: inventory.scope_id.clone(),
             nodes,
             edges,
         })
@@ -327,6 +329,13 @@ impl EvidenceGraph {
     #[must_use]
     pub const fn source_digest(&self) -> SnapshotDigest {
         self.source_digest
+    }
+
+    /// The exact inventory tenant/scope used to construct this graph.
+    /// This asserted scope is still not authenticated evidence of a tenant.
+    #[must_use]
+    pub fn source_scope_id(&self) -> &str {
+        &self.source_scope_id
     }
 
     /// Canonical nodes, sorted by stable opaque ID.
