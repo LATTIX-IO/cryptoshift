@@ -995,7 +995,12 @@ fn dependency_without_protocol_evidence_does_not_invent_handshake_observations()
     assert!(!has(&report, "a", BlockerCode::PeerProofUnverified));
     assert!(!has(&report, "a", BlockerCode::PeerCompatibilityMissing));
     let inferred_handshake = BlockerCode::Compatibility(CompatibilityCode::NegotiationMissing);
-    assert!(!report.blockers().iter().any(|finding| finding.code == inferred_handshake));
+    assert!(
+        !report
+            .blockers()
+            .iter()
+            .any(|finding| finding.code == inferred_handshake)
+    );
 }
 
 #[test]
@@ -1037,19 +1042,29 @@ fn changing_compatibility_evidence_rotates_individual_blocker_and_action_ids() {
         .find(|blocker| blocker.code == BlockerCode::OwnerMissing)
         .unwrap();
     assert_ne!(previous.id, current.id);
-    assert_eq!(current.compatibility_set_digest, after.compatibility_set_digest());
+    assert_eq!(
+        current.compatibility_set_digest,
+        after.compatibility_set_digest()
+    );
     let previous_gate = before
         .actions()
         .iter()
-        .find(|action| action.kind == RemediationActionKind::ReviewUnitGate && action.unit_id == "a")
+        .find(|action| {
+            action.kind == RemediationActionKind::ReviewUnitGate && action.unit_id == "a"
+        })
         .unwrap();
     let current_gate = after
         .actions()
         .iter()
-        .find(|action| action.kind == RemediationActionKind::ReviewUnitGate && action.unit_id == "a")
+        .find(|action| {
+            action.kind == RemediationActionKind::ReviewUnitGate && action.unit_id == "a"
+        })
         .unwrap();
     assert_ne!(previous_gate.id, current_gate.id);
-    assert_eq!(current_gate.compatibility_set_digest, after.compatibility_set_digest());
+    assert_eq!(
+        current_gate.compatibility_set_digest,
+        after.compatibility_set_digest()
+    );
 }
 
 #[test]
@@ -1059,7 +1074,13 @@ fn reordered_equivalent_compatibility_artifact_set_has_identical_ids_and_bytes()
     let forbidden = peer_analysis(&f, true);
     let first = run(&f, &[&standard, &forbidden]).unwrap();
     let reordered = run(&f, &[&forbidden, &standard]).unwrap();
-    assert_eq!(first.compatibility_set_digest(), reordered.compatibility_set_digest());
+    assert_eq!(
+        first.compatibility_set_digest(),
+        reordered.compatibility_set_digest()
+    );
     assert_eq!(first.digest(), reordered.digest());
-    assert_eq!(first.export(&Limits::default()).unwrap(), reordered.export(&Limits::default()).unwrap());
+    assert_eq!(
+        first.export(&Limits::default()).unwrap(),
+        reordered.export(&Limits::default()).unwrap()
+    );
 }
