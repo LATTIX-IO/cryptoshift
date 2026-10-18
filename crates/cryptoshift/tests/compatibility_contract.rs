@@ -607,3 +607,101 @@ fn frozen_v1_compatibility_export_digest_and_length() {
     let observed = format!("{} {}", report.digest().as_identifier(), bytes.len());
     assert_eq!(observed, include_str!("fixtures/compatibility_v1.sha256").trim());
 }
+
+
+fn graph_for_scope(scope: &str, with_dependency: bool) -> EvidenceGraph {
+    let l = limits();
+    let inventory = ValidatedInventorySnapshot::new(
+        InventorySnapshot {
+            identity_version: IDENTITY_VERSION,
+            normalization_version: NORMALIZATION_VERSION,
+            scope_id: scope.to_owned(),
+            runs: vec![CollectionRun {
+                id: "run1".into(),
+                source_id: "collector".into(),
+                scope_id: scope.to_owned(),
+                collected_at_unix_secs: TIME - 100,
+                completeness: CollectionCompleteness::Complete,
+            }],
+            evidence: vec![EvidenceRecord {
+                id: "ev1".into(),
+                run_id: "run1".into(),
+                source_id: "collector".into(),
+                basis: EvidenceBasis::Direct,
+                confidence_bps: 9500,
+                observed_at_unix_secs: TIME - 100,
+            }],
+            observations: vec![],
+            absences: vec![],
+        },
+        &l,
+    )
+    .unwrap();
+    let nodes = ["a", "b"]
+        .iter()
+        .map(|node_id| GraphNode {
+            id: (*node_id).into(),
+            kind: GraphNodeKind::System,
+            evidence_ids: vec!["ev1".into()],
+            observation_id: None,
+            observation_kind: None,
+        })
+        .collect();
+    let edges = if with_dependency {
+        vec![GraphEdge {
+            from: "a".into(),
+            to: "b".into(),
+            relation: GraphRelation::DependsOn,
+            evidence_ids: vec!["ev1".into()],
+        }]
+    } else {
+        vec![]
+    };
+    EvidenceGraph::new(&inventory, nodes, edges, &l).unwrap()
+}
+
+#[test]
+fn matching_graph_digest_cannot_mask_cross_tenant_inventory() {
+    let (_g, t, l, r, mut req) = fixture();
+    let foreign = graph_for_scope("tenant-b", false);
+    req.expected_graph_digest = foreign.fingerprint();
+    assert_eq!(foreign.source_scope_id(), "tenant-b");
+    assert_eq!(
+        analyze(&foreign, &t, &l, &r, &req).unwrap_err().code,
+        DiagnosticCode::InvalidReference
+    );
+}
+
+#[test]
+fn changing_graph_topology_invalidates_pinned_dependency_context() {
+    let (_g, t, l, r, req) = fixture();
+    let changed = graph_for_scope("tenant-a", true);
+    assert_eq!(
+        analyze(&changed, &t, &l, &r, &req).unwrap_err().code,
+        DiagnosticCode::IntegrityMismatch
+    );
+}
+
+#[test]
+fn invalid_provenance_is_rejected_without_echoing_sensitive_input() {
+    let (g, t, l, r, mut req) = fixture();
+    let mut suspect = link();
+    if let CompatibilityObservation::PeerLink(ref mut value) = suspect {
+        value.source.source_id = "password=secret value".into();
+    }
+    req.observations.push(suspect);
+    let error = analyze(&g, &t, &l, &r, &req).unwrap_err();
+    assert_eq!(error.code, DiagnosticCode::InvalidIdentifier);
+    assert!(!error.to_string().contains("secret"));
+}
+
+#[test]
+fn all_known_algorithm_candidates_remain_non_authoritative() {
+    let (g, t, l, r, mut req) = fixture();
+    for algorithm in KnownAlgorithm::ALL {
+        req.algorithm = algorithm;
+        req.role = algorithm.role();
+        let report = analyze(&g, &t, &l, &r, &req).unwrap();
+        assert_ne!(report.status(), CompatibilityStatus::Compatible);
+    }
+}
