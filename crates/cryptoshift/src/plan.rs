@@ -289,3 +289,413 @@ impl MigrationPlanDraft {
         Ok(self.canonical.clone())
     }
 }
+
+
+#[path = "plan_codec.rs"]
+mod codec;
+use codec::Encoder;
+
+/// Offline, bounded source-pinned plan builder. Does not authenticate approvals.
+pub struct MigrationPlanner;
+
+impl MigrationPlanner {
+    /// Hash an exact scoring definition, including all factor weights.
+    pub fn scoring_digest(score:&ScoreProfile,limits:&Limits)->Result<SnapshotDigest,Diagnostic>{
+        let mut writer=Encoder::new(limits);
+        writer.raw(b"CSHIFT_SCORING_PROFILE_D3_V1")?;
+        writer.string(score.id())?;
+        writer.u16(score.version())?;
+        for weight in score.weights_bps(){writer.u16(*weight)?;}
+        Ok(SnapshotDigest::hash(&writer.finish()))
+    }
+
+    /// Compute source pins for independent verification *before* building.
+    ///
+    /// A digest of untrusted inputs is only content identity; it is not a
+    /// trusted source, authority signature, or permission to migrate.
+    pub fn input_pins(
+        topology:&DependencyTopology,
+        remediation:&RemediationAnalysis,
+        wave:&WavePlanDraft,
+        target:&TargetProfile,
+        capability_catalogs:&[&CapabilityCatalog],
+        score:Option<&ScoreProfile>,
+        limits:&Limits,
+    )->Result<PlanSourcePins,Diagnostic>{
+        limits.validate()?;
+        limits.check(ResourceKind::ProfileReferences,capability_catalogs.len())?;
+        let wb=WavePlanner::input_bindings(topology,remediation,target,limits)?;
+        if wave.bindings()!=&wb{
+            return Err(problem(DiagnosticCode::IntegrityMismatch,"plan_wave_binding",
+                "wave draft and D1 must describe exactly the same source versions"));
+        }
+        let _ = wave.export(limits)?;
+        let b=remediation.bindings();
+        let now=b.evaluated_at_unix_secs;
+        if target.content().expires_at_unix_secs.is_some_and(|expiry|now>=expiry){
+            return Err(problem(DiagnosticCode::StaleCriticalProfile,"plan_target_expiry",
+                "target profile is no longer current at pinned evaluation time"));
+        }
+        let mut catalogs=Vec::with_capacity(capability_catalogs.len());
+        let mut seen=BTreeSet::new();
+        let mut records=0_usize;
+        for source in capability_catalogs{
+            let data=source.content();
+            if data.scope_id != target.content().scope_id {
+                return Err(problem(DiagnosticCode::InvalidReference,"plan_catalog_scope",
+                    "capability source cannot inherit facts across tenants"));
+            }
+            if !seen.insert(data.catalog_id.as_str()){
+                return Err(problem(DiagnosticCode::DuplicateRecord,"plan_catalog_id",
+                    "capability catalog IDs must be unique within a plan"));
+            }
+            records=limits.checked_add(ResourceKind::EvidenceRecords,records,data.records.len())?;
+            for record in &data.records {
+                if record.scope_id!=wb.scope_id {
+                    return Err(problem(DiagnosticCode::InvalidReference,"plan_record_scope",
+                        "capability record has mismatched deployment scope"));
+                }
+                if record.evidence.observed_at_unix_secs>now{
+                    return Err(problem(DiagnosticCode::InvalidStateTransition,
+                        "plan_capability_future","future observation cannot be used as present evidence"));
+                }
+                if record.evidence.expires_at_unix_secs.is_some_and(|expiry|now>=expiry) {
+                    return Err(problem(DiagnosticCode::StaleCriticalProfile,
+                        "plan_capability_expiry","an externally claimed capability observation expired"));
+                }
+            }
+            catalogs.push(PlanCatalogPin{
+                catalog_id:data.catalog_id.clone(),revision:data.revision,digest:source.digest(),
+            });
+        }
+        catalogs.sort_by(|a,b|a.catalog_id.cmp(&b.catalog_id));
+        let mut writer=Encoder::new(limits);
+        writer.raw(b"CSHIFT_CATALOG_SET_D3_V1")?;
+        writer.count(catalogs.len())?;
+        for catalog in &catalogs{
+            writer.string(&catalog.catalog_id)?;
+            writer.u32(catalog.revision)?;
+            writer.digest(catalog.digest)?;
+        }
+        let catalog_set_digest=SnapshotDigest::hash(&writer.finish());
+        let scoring=score.map(|p| -> Result<PlanScorePin,Diagnostic> {
+            Ok(PlanScorePin{
+                profile_id:p.id().to_owned(),version:p.version(),
+                digest:Self::scoring_digest(p,limits)?,
+            })
+        }).transpose()?;
+        limits.check(ResourceKind::ProfileReferences,target.content().standards.len())?;
+        Ok(PlanSourcePins{
+            scope_id:wb.scope_id.clone(),
+            evaluated_at_unix_secs:now,
+            wave_digest:wave.digest(),
+            remediation_digest:remediation.digest(),
+            compatibility_set_digest:wb.compatibility_set_digest,
+            inventory_digest:b.inventory_digest,
+            graph_digest:b.graph_digest,
+            topology_digest:b.topology_digest,
+            target_digest:b.target_digest,
+            risk_digest:b.risk_digest,
+            standards_catalog_version:STANDARDS_CATALOG_VERSION,
+            standards:target.content().standards.clone(),
+            catalogs,catalog_set_digest,scoring,
+        })
+    }
+
+    /// Build a complete, nonexecuting plan with all residual risks retained.
+    ///
+    /// No source pin, exception request or signed-looking receipt automatically
+    /// discharges one D1/D2 gate or upgrades a unit to operational Ready.
+    pub fn build(
+        topology:&DependencyTopology,
+        remediation:&RemediationAnalysis,
+        wave:&WavePlanDraft,
+        target:&TargetProfile,
+        capability_catalogs:&[&CapabilityCatalog],
+        score:Option<&ScoreProfile>,
+        request:&MigrationPlanRequest,
+        limits:&Limits,
+    )->Result<MigrationPlanDraft,Diagnostic>{
+        limits.validate()?;
+        if request.schema_version!=MIGRATION_PLAN_VERSION{
+            return Err(problem(DiagnosticCode::UnsupportedSchemaVersion,"migration_plan_version",
+                "unsupported immutable MigrationPlan schema revision"));
+        }
+        limits.check(ResourceKind::ProfileReferences,request.exceptions.len())?;
+        limits.check(ResourceKind::GraphNodes,wave.readiness().len())?;
+        limits.check(ResourceKind::PlanWaves,wave.waves().len())?;
+        limits.check(ResourceKind::PlanActions,remediation.actions().len())?;
+        limits.check(ResourceKind::Diagnostics,remediation.blockers().len())?;
+        let current=Self::input_pins(topology,remediation,wave,target,capability_catalogs,score,limits)?;
+        if request.expected_pins!=current{
+            return Err(problem(DiagnosticCode::IntegrityMismatch,"migration_plan_replay",
+                "supplied plan pins do not match exact D1/D2/target/source versions"));
+        }
+        // Re-admit nested output sizes under this caller's active work budget,
+        // including SCC members hidden by graph condensation.
+        let mut member_count=0_usize;
+        let mut work_count=0_usize;
+        let mut evidence_count=0_usize;
+        for item in wave.readiness(){
+            member_count=limits.checked_add(ResourceKind::GraphNodes,member_count,item.system_ids.len())?;
+            work_count=limits.checked_add(ResourceKind::PlannerCandidates,work_count,item.gates.len())?;
+            for gate in &item.gates{
+                evidence_count=limits.checked_add(ResourceKind::EvidenceRecords,evidence_count,gate.evidence.len())?;
+            }
+        }
+        for cap in capability_catalogs{
+            evidence_count=limits.checked_add(ResourceKind::EvidenceRecords,evidence_count,cap.content().records.len())?;
+        }
+        work_count=limits.checked_add(ResourceKind::PlannerCandidates,work_count,request.exceptions.len())?;
+        work_count=limits.checked_add(ResourceKind::PlannerCandidates,work_count,remediation.actions().len())?;
+        limits.check(ResourceKind::EvidenceRecords,evidence_count)?;
+        limits.check(ResourceKind::PlanActions,work_count)?;
+
+        let owners:BTreeMap<&str,&RemediationOwner>=remediation.actions().iter()
+            .filter(|a|a.kind==crate::RemediationActionKind::ReviewUnitGate)
+            .map(|a|(a.unit_id.as_str(),&a.owner)).collect();
+        let known_units:BTreeSet<&str>=wave.readiness().iter().map(|r|r.unit_id.as_str()).collect();
+        let now=current.evaluated_at_unix_secs;
+        let known_constraints:BTreeSet<&str>=target.content().algorithms.iter()
+            .map(|c|c.algorithm.id())
+            .chain(target.content().protocols.iter().map(|c|c.protocol_id.as_str()))
+            .chain(target.content().certificates.iter().map(|c|c.profile_id.as_str()))
+            .collect();
+        let mut seen_exceptions=BTreeSet::new();
+        let mut input_bytes=0_usize;
+        let mut exceptions=Vec::with_capacity(request.exceptions.len());
+        for entry in &request.exceptions {
+            for value in [
+                &entry.request_id,&entry.scope_id,&entry.unit_id,
+                &entry.target_constraint_id,&entry.requester_source_id,&entry.justification_reference
+            ] {
+                validate_reference(value)?;
+                input_bytes=limits.checked_add(ResourceKind::InputBytes,input_bytes,value.len())?;
+            }
+            if entry.scope_id!=current.scope_id || !known_units.contains(entry.unit_id.as_str())
+                || !known_constraints.contains(entry.target_constraint_id.as_str())
+            {
+                return Err(problem(DiagnosticCode::InvalidReference,"plan_exception_scope",
+                    "exception request must name an existing tenant, SCC and target constraint"));
+            }
+            if !seen_exceptions.insert(entry.request_id.as_str()){
+                return Err(problem(DiagnosticCode::DuplicateRecord,"plan_exception_id",
+                    "exception record ID cannot repeat within a plan"));
+            }
+            match owners.get(entry.unit_id.as_str()){
+                Some(RemediationOwner::Claimed(owner)) if owner==&entry.requester_source_id => {},
+                _ => return Err(problem(DiagnosticCode::InvalidReference,"plan_exception_owner",
+                    "exception requester must match a unique D1 owner claim")),
+            }
+            if entry.requested_at_unix_secs>now
+                || entry.expires_at_unix_secs<=entry.requested_at_unix_secs
+            {
+                return Err(problem(DiagnosticCode::InvalidStateTransition,"plan_exception_time",
+                    "exception request must have a valid source-defined time interval"));
+            }
+            if let Some(claim)=&entry.claimed_approval{
+                for value in [&claim.issuer_id,&claim.receipt_reference,&claim.source_revision]{
+                    validate_reference(value)?;
+                    input_bytes=limits.checked_add(ResourceKind::InputBytes,input_bytes,value.len())?;
+                }
+                if claim.issuer_id==entry.requester_source_id
+                    || claim.observed_at_unix_secs<entry.requested_at_unix_secs
+                    || claim.observed_at_unix_secs>now
+                {
+                    return Err(problem(DiagnosticCode::InvalidStateTransition,"plan_exception_claim",
+                        "exception claim must be separately sourced and temporally consistent"));
+                }
+            }
+            let state=if now>=entry.expires_at_unix_secs{
+                PlanExceptionState::Expired
+            } else if entry.claimed_approval.is_some(){
+                PlanExceptionState::ClaimedApprovalUnverified
+            } else {
+                PlanExceptionState::Requested
+            };
+            exceptions.push(PlanExceptionRecord{request:entry.clone(),state});
+        }
+        exceptions.sort_by(|a,b|a.request.request_id.cmp(&b.request.request_id));
+
+        let blockers:BTreeMap<&str,&BlockerFinding>=remediation.blockers().iter()
+            .map(|b|(b.id.as_str(),b)).collect();
+        let mut facets=Vec::new();
+        for unit in wave.readiness(){
+            for gate in &unit.gates{
+                let blocker=gate.blocker_id.as_deref()
+                    .map(|id|blockers.get(id).copied().ok_or_else(||problem(
+                        DiagnosticCode::InvalidReference,"plan_source_blocker",
+                        "D2 references an absent D1 blocker"))).transpose()?;
+                if blocker.is_some_and(|b|b.unit_id!=unit.unit_id){
+                    return Err(problem(DiagnosticCode::InvalidReference,"plan_blocker_unit",
+                        "D2 gate cannot borrow a blocker from another SCC"));
+                }
+                let kind=classify_gate(gate.kind,blocker);
+                let refs:Vec<_>=gate.evidence.iter().cloned()
+                    .map(PlanEvidenceRef::Remediation).collect();
+                facets.push(ResidualRiskFacet{
+                    id:String::new(),unit_id:Some(unit.unit_id.clone()),
+                    kind,blocker_id:gate.blocker_id.clone(),
+                    action_id:gate.action_id.clone(),
+                    prerequisite_unit_id:gate.upstream_unit_id.clone(),
+                    evidence:refs,validation_gates:gate.validations.clone(),
+                    due_at_unix_secs:unit.due_at_unix_secs,
+                });
+            }
+        }
+        if capability_catalogs.is_empty(){
+            facets.push(ResidualRiskFacet{
+                id:String::new(),unit_id:None,kind:ResidualRiskKind::MissingCapabilityEvidence,
+                blocker_id:None,action_id:None,prerequisite_unit_id:None,
+                evidence:vec![],validation_gates:vec![RemediationGate::VerifyProvider],
+                due_at_unix_secs:None,
+            });
+        }else{
+            for catalog in capability_catalogs{
+                for record in &catalog.content().records{
+                    facets.push(ResidualRiskFacet{
+                        id:String::new(),unit_id:None,kind:ResidualRiskKind::VendorCapability,
+                        blocker_id:None,action_id:None,prerequisite_unit_id:None,
+                        evidence:vec![PlanEvidenceRef::Capability{
+                            source_id:record.evidence.source_id.clone(),
+                            evidence_id:record.evidence.evidence_id.clone(),
+                            source_revision:record.evidence.source_revision.clone(),
+                        }],
+                        validation_gates:vec![RemediationGate::VerifyProvider],
+                        due_at_unix_secs:None,
+                    });
+                }
+            }
+        }
+        for exception in &exceptions{
+            let mut refs=vec![PlanEvidenceRef::Exception{
+                source_id:exception.request.requester_source_id.clone(),
+                reference_id:exception.request.justification_reference.clone(),
+                revision:String::new(), // no source revision was provided
+            }];
+            if let Some(claim)=&exception.request.claimed_approval{
+                refs.push(PlanEvidenceRef::Exception{
+                    source_id:claim.issuer_id.clone(),
+                    reference_id:claim.receipt_reference.clone(),
+                    revision:claim.source_revision.clone(),
+                });
+            }
+            facets.push(ResidualRiskFacet{
+                id:String::new(),unit_id:Some(exception.request.unit_id.clone()),
+                kind:ResidualRiskKind::ExceptionUnverified,
+                blocker_id:None,action_id:None,prerequisite_unit_id:None,
+                evidence:refs,
+                validation_gates:vec![RemediationGate::ApprovePolicyAlternative],
+                due_at_unix_secs:Some(exception.request.expires_at_unix_secs),
+            });
+        }
+        limits.check(ResourceKind::Diagnostics,facets.len())?;
+        limits.check(ResourceKind::PlanActions,facets.len())?;
+        // Domain-separated per-facet identifiers bind all original revisions.
+        for facet in &mut facets{
+            facet.evidence.sort();
+            facet.validation_gates.sort();
+            let mut writer=Encoder::new(limits);
+            writer.raw(b"CSHIFT_RESIDUAL_FACET_D3_V1")?;
+            writer.digest(current.wave_digest)?;
+            writer.digest(current.remediation_digest)?;
+            writer.digest(current.compatibility_set_digest)?;
+            writer.facet(facet)?;
+            facet.id=SnapshotDigest::hash(&writer.finish()).as_identifier();
+        }
+        facets.sort_by(|a,b|(&a.unit_id,a.kind,&a.blocker_id,&a.action_id,
+            &a.prerequisite_unit_id,&a.id)
+            .cmp(&(&b.unit_id,b.kind,&b.blocker_id,&b.action_id,&b.prerequisite_unit_id,&b.id)));
+        let status=if wave.readiness().iter().any(|u|u.status==UnitReadinessStatus::Blocked){
+            PlanAssessmentState::Blocked
+        }else if wave.readiness().iter().any(|u|u.status==UnitReadinessStatus::Unverified)
+            || facets.iter().any(|f|matches!(f.kind,
+                ResidualRiskKind::MissingCapabilityEvidence|ResidualRiskKind::VendorCapability
+                |ResidualRiskKind::ExceptionUnverified))
+        {
+            PlanAssessmentState::Partial
+        }else if wave.readiness().iter().any(|u|u.status==UnitReadinessStatus::AwaitingExternalApproval){
+            PlanAssessmentState::ExternalApprovalPending
+        }else{
+            PlanAssessmentState::CompleteEvidenceForReview
+        };
+        let mut blocker_ids:Vec<String>=remediation.blockers().iter().map(|b|b.id.clone()).collect();
+        blocker_ids.sort();
+        let mut action_ids:Vec<String>=remediation.actions().iter().map(|a|a.id.clone()).collect();
+        action_ids.sort();
+        let mut writer=Encoder::new(limits);
+        writer.raw(b"CSHIFT_MIGRATION_PLAN_V1")?;
+        writer.u16(MIGRATION_PLAN_VERSION)?;
+        writer.pins(&current)?;
+        writer.u8(status as u8)?;
+        writer.count(wave.waves().len())?;
+        for stage in wave.waves(){writer.wave(stage)?;}
+        writer.count(wave.readiness().len())?;
+        for readiness in wave.readiness(){writer.readiness(readiness)?;}
+        writer.strings(&blocker_ids)?;
+        writer.strings(&action_ids)?;
+        writer.count(facets.len())?;
+        for facet in &facets{writer.facet(facet)?;}
+        writer.count(exceptions.len())?;
+        for entry in &exceptions{writer.exception(entry)?;}
+        let canonical=writer.finish();
+        let digest=SnapshotDigest::hash(&canonical);
+        Ok(MigrationPlanDraft{
+            pins:current,status,waves:wave.waves().to_vec(),
+            readiness:wave.readiness().to_vec(),blockers:blocker_ids,actions:action_ids,
+            residual_risks:facets,exceptions,canonical,digest,
+        })
+    }
+}
+
+fn validate_reference(value:&str)->Result<(),Diagnostic>{
+    if value.is_empty() || value.len()>256 || value.trim()!=value
+        || value.chars().any(char::is_control) {
+        return Err(problem(DiagnosticCode::InvalidIdentifier,"plan_external_reference",
+            "a bounded source identifier must be present without control characters"));
+    }
+    Ok(())
+}
+
+fn classify_gate(kind:ReadinessGateKind,blocker:Option<&BlockerFinding>)->ResidualRiskKind{
+    if let Some(blocker)=blocker{
+        if blocker.severity==BlockerSeverity::HardPolicy{
+            return ResidualRiskKind::PolicyConstraint;
+        }
+        if blocker.required_gates.contains(&RemediationGate::ValidatePki){
+            return ResidualRiskKind::PkiTrust;
+        }
+        if blocker.required_gates.contains(&RemediationGate::AuthenticatePeer)
+            || blocker.required_gates.contains(&RemediationGate::VerifyHybrid){
+            return ResidualRiskKind::PeerProtocol;
+        }
+        if blocker.required_gates.contains(&RemediationGate::VerifyProvider){
+            return ResidualRiskKind::VendorCapability;
+        }
+        return match blocker.code{
+            BlockerCode::OwnerMissing|BlockerCode::OwnerAmbiguous=>ResidualRiskKind::Ownership,
+            BlockerCode::RiskUnresolved(RiskFactorKind::QuantumExposure)
+            |BlockerCode::RiskElevated(RiskFactorKind::QuantumExposure)
+            |BlockerCode::RiskUnresolved(_)|BlockerCode::RiskElevated(_)
+                =>ResidualRiskKind::QuantumOrContextRisk,
+            BlockerCode::DependencyGate=>ResidualRiskKind::Dependency,
+            BlockerCode::DeadlinePassed=>ResidualRiskKind::Deadline,
+            BlockerCode::PeerProofUnverified|BlockerCode::PeerCompatibilityMissing
+            |BlockerCode::Compatibility(_)|BlockerCode::CompatibilityGate(_)
+                =>ResidualRiskKind::EvidenceQuality,
+        };
+    }
+    match kind {
+        ReadinessGateKind::UnresolvedBlocker|ReadinessGateKind::ActionValidation
+            =>ResidualRiskKind::EvidenceQuality,
+        ReadinessGateKind::UpstreamUnitApproval=>ResidualRiskKind::Dependency,
+        ReadinessGateKind::IndependentUnitReview=>ResidualRiskKind::UnitReview,
+        ReadinessGateKind::ChangeApproval=>ResidualRiskKind::ChangeApproval,
+        ReadinessGateKind::MaintenanceWindow=>ResidualRiskKind::Maintenance,
+        ReadinessGateKind::RollbackPlan=>ResidualRiskKind::Rollback,
+    }
+}
+
+fn problem(code:DiagnosticCode,subject:&'static str,reason:&'static str)->Diagnostic{
+    Diagnostic::new(code,subject,reason)
+}
