@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     AbsenceStatus, CollectionCompleteness, ConflictState, CryptoObservation,
-    Diagnostic, DiagnosticCode, EvidenceGraph, GraphEdge, GraphNode, InventorySnapshot,
+    Diagnostic, DiagnosticCode, EvidenceGraph, GraphEdge, GraphNode,
     Limits, ResourceKind, SchemaKind, SchemaVersion, SnapshotDigest,
     ValidatedInventorySnapshot, VersionedEnvelope, IDENTITY_VERSION,
     NORMALIZATION_VERSION,
@@ -316,7 +316,11 @@ impl NeutralChangeSet {
             next.runs.iter().map(|r| (r.id.as_str(), r)).collect();
         let evidence: BTreeMap<&str, &crate::EvidenceRecord> =
             next.evidence.iter().map(|e| (e.id.as_str(), e)).collect();
+        let mut references = 0usize;
         for claim in &mut input.changes {
+            references = limits.checked_add(
+                ResourceKind::GraphEdges, references, claim.evidence_ids.len(),
+            )?;
             identifier(&claim.asset_id, "neutral_change_asset")?;
             identifier(&claim.run_id, "neutral_change_run")?;
             if let Some(id) = claim.observation_id.as_deref() {
