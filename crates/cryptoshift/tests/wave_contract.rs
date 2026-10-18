@@ -826,7 +826,6 @@ fn required_certificate_profile_without_pki_validation_never_ready() {
     }));
 }
 
-
 #[test]
 fn tight_graph_budget_counts_all_systems_inside_multiple_sccs() {
     let f = fixture(
