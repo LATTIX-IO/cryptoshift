@@ -232,6 +232,21 @@ impl<'a> Encoder<'a> {
     pub(super) fn facet(&mut self, value: &ResidualRiskFacet) -> Result<(), Diagnostic> {
         self.string(&value.id)?;
         self.optional_string(&value.unit_id)?;
+        self.bool(value.subject.is_some())?;
+        if let Some(subject) = &value.subject {
+            match subject {
+                PlanFacetSubject::Capability { catalog_id, record_id } => {
+                    self.u8(1)?;
+                    self.string(catalog_id)?;
+                    self.string(record_id)?;
+                }
+                PlanFacetSubject::Exception { request_id, target_constraint_id } => {
+                    self.u8(2)?;
+                    self.string(request_id)?;
+                    self.string(target_constraint_id)?;
+                }
+            }
+        }
         self.u8(value.kind as u8)?;
         self.optional_string(&value.blocker_id)?;
         self.optional_string(&value.action_id)?;
