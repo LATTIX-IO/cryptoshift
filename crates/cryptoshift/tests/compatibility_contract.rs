@@ -143,7 +143,7 @@ fn has(report: &CompatibilityAnalysis, code: CompatibilityCode) -> bool {
 fn advertised_algorithms_without_negotiation_never_compatible() {
     let (g,t,l,r,req) = fixture();
     let result = analyze(&g,&t,&l,&r,&req).unwrap();
-    assert_eq!(result.status(), CompatibilityStatus::Conditional);
+    assert_eq!(result.status(), CompatibilityStatus::Unknown);
     assert!(has(&result, CompatibilityCode::NegotiationMissing));
     assert!(has(&result, CompatibilityCode::PeerLinkMissing));
     assert_eq!(result.bindings().graph_digest, g.fingerprint());
