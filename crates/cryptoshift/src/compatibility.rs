@@ -1194,6 +1194,17 @@ fn admit(request: &CompatibilityRequest, limits: &Limits) -> Result<(), Diagnost
                 }
                 limits.check(ResourceKind::ProfileReferences, item.initiator_offers.len())?;
                 limits.check(ResourceKind::ProfileReferences, item.responder_offers.len())?;
+                if item.initiator_offers.iter().collect::<BTreeSet<_>>().len()
+                    != item.initiator_offers.len()
+                    || item.responder_offers.iter().collect::<BTreeSet<_>>().len()
+                        != item.responder_offers.len()
+                {
+                    return Err(err(
+                        DiagnosticCode::DuplicateRecord,
+                        "compatibility_offers",
+                        "a negotiation offer cannot repeat an exact parameter set",
+                    ));
+                }
                 if item
                     .initiator_offers
                     .iter()
