@@ -18,7 +18,7 @@ No new runtime dependencies, network clients, cross-repository imports, secret s
 
 Classifications remain the exact `CryptoUseKind` variants `ActiveUse`, `LibraryCapability`, `ConfiguredProtocol`, `NegotiatedProtocol` and `Unknown`. A configured protocol does not imply an observed handshake; `DependsOn` is only an operational graph dependency. A record labeled `NegotiatedProtocol` must cite at least one `EvidenceBasis::Direct` observation rather than inference alone; this remains a source claim, **not an authenticated TLS/QUIC handshake receipt**. Evidence remains independent across `EvidenceBasis`, collection runs, `ConflictState` and `CollectionCompleteness`. Scoped `AbsenceRecord` status `Tentative` is never promoted to `Confirmed` by a partial or failed scan.
 
-**Transport limitation:** Canonical inventory bytes have a real validated decoder via `ValidatedInventorySnapshot::import_verified`. The neutral graph metadata projection is an independently bounded **typed Rust fixture DTO**, not a self-deserializing Cryptomap graph wire message. Its composite SHA-256 binds the graph's canonical fingerprint. E2 should test an actual published upstream transport when available rather than guessing its schema here.
+**Transport limitation:** Canonical inventory bytes have a real validated decoder via `ValidatedInventorySnapshot::import_verified`. The neutral graph metadata projection is an independently bounded **typed Rust fixture DTO**, not a self-deserializing Cryptomap graph wire message. Its composite SHA-256 binds the graph's canonical fingerprint. The adapter preflights all borrowed node/edge names, nested evidence reference counts and combined input bytes before it clones graph values. E2 should test an actual published upstream transport when available rather than guessing its schema here.
 
 ## Evidence-backed source ChangeSet
 
@@ -26,7 +26,7 @@ Classifications remain the exact `CryptoUseKind` variants `ActiveUse`, `LibraryC
 
 Each `NeutralChangeClaim` names a real source run and source-local evidence IDs, plus an exact asset and optional observation. The five kinds are `ObservationAdded`, `ObservationModified`, `ObservationConflicted`, `TentativeAbsent`, `ConfirmedAbsent`.
 
-The adapter verifies observations against the actual prior/current snapshots, forbids future-evidence inheritance and rejects missing source runs, wrong-run evidence, forged additions or modifications, and duplicate events. **Confirmed absence requires a complete current scoped run, a matching current confirmed absence, and an asset observed in the previous snapshot without a current sighting.** An unknown or partial rescan cannot report deletion. The result is an immutable, sorted, digest-identified and bounded export. It is a source-declared **set of changes**: an empty set is not proof that an uninspected asset is unchanged.
+The adapter uses indexed lookups against sorted, validated observation evidence (not quadratic `Vec::contains` scans) and verifies observations against the actual prior/current snapshots, forbids future-evidence inheritance and rejects missing source runs, wrong-run evidence, forged additions or modifications, and duplicate events. **Confirmed absence requires a complete current scoped run, a matching current confirmed absence, and an asset observed in the previous snapshot without a current sighting.** An unknown or partial rescan cannot report deletion. The result is an immutable, sorted, digest-identified and bounded export. It is a source-declared **set of changes**: an empty set is not proof that an uninspected asset is unchanged.
 
 The ChangeSet v1 export is canonical length-prefixed binary content for digests and fixtures, not a general-purpose upstream binary importer. Canonical writers enforce both active import and export byte budgets **before extending output buffers**. No cryptographic removal or migration execution is performed.
 
@@ -42,7 +42,7 @@ The outcomes are `PermitClaimed`, `DenyClaimed` and `Indeterminate`. Their label
 
 ## Standalone external Cargo consumer
 
-The independently rooted project at `acceptance/neutral-consumer` depends only on `../../crates/cryptoshift`, with its own `[workspace]` and Rust 2024 / Rust 1.85 settings.
+The independently rooted project at `acceptance/neutral-consumer` depends only on `../../crates/cryptoshift`, with its own `[workspace]`, committed independent `Cargo.lock`, and Rust 2024 / Rust 1.85 settings.
 
 ```sh
 cargo fmt --all -- --check
@@ -51,7 +51,7 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test --workspace --all-features --locked
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps --locked
 cargo fmt --manifest-path acceptance/neutral-consumer/Cargo.toml -- --check
-cargo run --offline --manifest-path acceptance/neutral-consumer/Cargo.toml
+cargo run --frozen --manifest-path acceptance/neutral-consumer/Cargo.toml
 ```
 
 Expected consumer lines: `neutral inventory: 1`, `neutral delta claims: 1`, `neutral policy gate: Unverified`. This consumer does **not** use private Lattix services and cannot approve a migration. The GitHub CI job separately runs it under stable Rust and Rust 1.85, alongside release safety, RustSec, cargo-deny and SemVer.
