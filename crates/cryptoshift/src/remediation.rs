@@ -700,7 +700,14 @@ impl RemediationAnalyzer {
                     "compatibility responder not in exact SCC topology",
                 )
             })?;
-            let pair = (a.to_owned(), b.to_owned());
+            // A protocol evidence pair is exact to the two participating
+            // graph systems; reverse-direction observations still describe
+            // the same peer relationship for completeness accounting.
+            let pair = if a <= b {
+                (a.to_owned(), b.to_owned())
+            } else {
+                (b.to_owned(), a.to_owned())
+            };
             if peers.insert(pair, analysis.digest()).is_some() {
                 contradictory_units.insert((*from).to_owned());
                 contradictory_units.insert((*to).to_owned());
@@ -937,6 +944,30 @@ impl RemediationAnalyzer {
                 }
             }
         }
+        // A report on some other peer of the same SCC cannot satisfy a
+        // dependent-to-prerequisite communication relationship. Walk graph
+        // edges once, bounded by the existing GraphEdges limit.
+        let mut missing_dependency_units = BTreeSet::new();
+        for edge in graph.edges().iter().filter(|edge|
+            edge.relation == GraphRelation::DependsOn
+        ) {
+            let dependent = unit_by_system.get(edge.from.as_str()).ok_or_else(|| {
+                problem(DiagnosticCode::InvalidReference, "remediation_dependency_source",
+                    "dependency source must belong to an exact SCC")
+            })?;
+            let prerequisite = unit_by_system.get(edge.to.as_str()).ok_or_else(|| {
+                problem(DiagnosticCode::InvalidReference, "remediation_dependency_target",
+                    "dependency target must belong to an exact SCC")
+            })?;
+            let pair = if edge.from <= edge.to {
+                (edge.from.clone(), edge.to.clone())
+            } else {
+                (edge.to.clone(), edge.from.clone())
+            };
+            if dependent != prerequisite && !peers.contains_key(&pair) {
+                missing_dependency_units.insert((*dependent).to_owned());
+            }
+        }
         for arc in topology.prerequisites() {
             let source = arc
                 .evidence_ids
@@ -951,9 +982,7 @@ impl RemediationAnalyzer {
                 source,
                 RemediationGate::ValidatePrerequisite,
             );
-            if !compat_by_unit.contains_key(&arc.dependent_unit)
-                || !compat_by_unit.contains_key(&arc.prerequisite_unit)
-            {
+            if missing_dependency_units.contains(&arc.dependent_unit) {
                 push(
                     &arc.dependent_unit,
                     BlockerCode::PeerCompatibilityMissing,
