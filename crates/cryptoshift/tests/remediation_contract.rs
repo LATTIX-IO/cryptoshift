@@ -995,10 +995,7 @@ fn dependency_without_protocol_evidence_does_not_invent_handshake_observations()
     assert!(!has(&report, "a", BlockerCode::PeerProofUnverified));
     assert!(!has(&report, "a", BlockerCode::PeerCompatibilityMissing));
     let inferred_handshake = BlockerCode::Compatibility(CompatibilityCode::NegotiationMissing);
-    assert!(!report
-        .blockers()
-        .iter()
-        .any(|finding| finding.code == inferred_handshake));
+    assert!(!report.blockers().iter().any(|finding| finding.code == inferred_handshake));
 }
 
 #[test]
