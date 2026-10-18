@@ -18,7 +18,7 @@ Cryptoshift's Gate D1 creates **offline remediation proposals**, not migration e
 - Unsigned handshake receipts, vendor-roadmap statuses, missing PKI/revocation proof and unapproved downgrade claims remain blocking.
 - Only an explicitly applicable target deadline is shown. No release date, effort estimate, chosen product upgrade, policy exception or new hybrid combiner is invented.
 - `UnitReadinessReview` is an *action to request human evaluation*, never a declaration of `Ready`. It depends on all blockers in its own SCC plus prerequisite unit gate actions. Cycles collapse to one indivisible SCC before action planning.
-- `change_approval_required` and `rollback: ReviewedPlanRequired` on unit gates encode future procedural requirements, not approval itself.
+- `change_approval_required`, `maintenance: ReviewedWindowRequired` and `rollback: ReviewedPlanRequired` on unit gates encode future procedural requirements, not approval itself.
 
 The library performs no I/O, PKI verification, product scanning, lifecycle changes, network connections or maintenance operations.
 
