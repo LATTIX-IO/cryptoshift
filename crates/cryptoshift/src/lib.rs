@@ -26,6 +26,7 @@
 #![warn(missing_docs)]
 
 mod capability;
+mod compatibility;
 mod diagnostic;
 mod envelope;
 mod graph;
@@ -78,4 +79,14 @@ pub use capability::{
     CAPABILITY_CATALOG_VERSION, CapabilityCatalog, CapabilityCatalogDraft, CapabilityEvidence,
     CapabilityEvidenceBasis, CapabilityEvidenceRef, CapabilityMatch, CapabilityMatchState,
     CapabilityRecord, CapabilitySelector, CapabilityState, EvidenceVerification,
+};
+
+// Conservative offline peer and PKI compatibility analysis.
+pub use compatibility::{
+    COMPATIBILITY_ANALYSIS_VERSION, CertificateSelection, CompatibilityAnalysis,
+    CompatibilityAnalyzer, CompatibilityBindings, CompatibilityCode,
+    CompatibilityFinding, CompatibilityObservation, CompatibilityPrerequisite,
+    CompatibilityRequest, CompatibilitySource, CompatibilityStatus,
+    CompatibilitySubject, EndpointIdentity, HybridSelection,
+    NegotiationObservation, PeerLinkObservation, PkiObservation,
 };
