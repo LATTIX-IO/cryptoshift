@@ -1024,3 +1024,189 @@ fn residual_risk_identifiers_reject_stale_scoring_profile_bindings() {
     assert_ne!(prior.residual_risks()[0].id, next.residual_risks()[0].id);
     assert_ne!(prior.digest(), next.digest());
 }
+
+fn peer_catalog(provider: &str, runtime: &str) -> CapabilityCatalog {
+    CapabilityCatalog::new(
+        CapabilityCatalogDraft {
+            schema_version: CAPABILITY_CATALOG_VERSION,
+            catalog_id: format!("catalog-{provider}"),
+            revision: 1,
+            scope_id: "tenant-a".into(),
+            provenance: ProfileProvenance {
+                issuer_id: "vendor".into(),
+                document_id: "catalog".into(),
+                revision: "1".into(),
+                source_digest: None,
+            },
+            records: vec![CapabilityRecord {
+                record_id: format!("record-{provider}"),
+                provider_id: provider.into(),
+                product_id: "server".into(),
+                product_version: "1".into(),
+                platform_id: "linux".into(),
+                scope_id: "tenant-a".into(),
+                runtime_id: Some(runtime.into()),
+                algorithm: KnownAlgorithm::MlKem1024,
+                role: AlgorithmRole::KeyEncapsulation,
+                state: CapabilityState::Available,
+                evidence: CapabilityEvidence {
+                    source_id: "vendor".into(),
+                    evidence_id: format!("evidence-{provider}"),
+                    source_revision: "1".into(),
+                    basis: CapabilityEvidenceBasis::VendorDocumentation,
+                    verification: EvidenceVerification::Unverified,
+                    verification_reference: None,
+                    artifact_digest: None,
+                    observed_at_unix_secs: NOW - 10,
+                    expires_at_unix_secs: Some(NOW + 100),
+                },
+            }],
+        },
+        &Limits::default(),
+        Some(NOW),
+    )
+    .unwrap()
+}
+
+fn peer_report(f: &Fixture, classical_fallback: bool, certificate: bool) -> CompatibilityAnalysis {
+    let left = peer_catalog("vendor-a", "runtime-a");
+    let right = peer_catalog("vendor-b", "runtime-b");
+    let selected_certificate = certificate.then(|| CertificateSelection {
+        profile_id: "x509-profile".into(),
+        revision: "v1".into(),
+        certificate_id: "leaf-1".into(),
+        chain_id: "chain-1".into(),
+        trust_anchor_id: "root-1".into(),
+        signature_algorithm: KnownAlgorithm::MlDsa87,
+    });
+    let req = CompatibilityRequest {
+        schema_version: COMPATIBILITY_ANALYSIS_VERSION,
+        scope_id: "tenant-a".into(),
+        expected_graph_digest: f.graph.fingerprint(),
+        expected_target_digest: f.target.digest(),
+        expected_initiator_catalog_digest: left.digest(),
+        expected_responder_catalog_digest: right.digest(),
+        initiator: EndpointIdentity {
+            system_node_id: "a".into(),
+            provider_id: "vendor-a".into(),
+            product_id: "server".into(),
+            product_version: "1".into(),
+            platform_id: "linux".into(),
+            runtime_id: "runtime-a".into(),
+        },
+        responder: EndpointIdentity {
+            system_node_id: "b".into(),
+            provider_id: "vendor-b".into(),
+            product_id: "server".into(),
+            product_version: "1".into(),
+            platform_id: "linux".into(),
+            runtime_id: "runtime-b".into(),
+        },
+        protocol_id: "transport".into(),
+        protocol_revision: "v1".into(),
+        extension_revision: "extension-1".into(),
+        algorithm: KnownAlgorithm::MlKem1024,
+        role: AlgorithmRole::KeyEncapsulation,
+        certificate: selected_certificate,
+        hybrid: None,
+        classical_fallback,
+        observations: vec![],
+    };
+    CompatibilityAnalyzer::analyze(
+        &req,
+        &f.graph,
+        &f.target,
+        &left,
+        &right,
+        NOW,
+        &Limits::default(),
+    )
+    .unwrap()
+}
+
+fn bind_peer(f: &mut Fixture, report: &CompatibilityAnalysis) {
+    let limits = Limits::default();
+    let pinned = RemediationAnalyzer::input_bindings(
+        &f.inventory,
+        &f.graph,
+        &f.topology,
+        &f.risk,
+        &f.target,
+        NOW,
+        &limits,
+    )
+    .unwrap();
+    f.remediation = RemediationAnalyzer::analyze(
+        &f.inventory,
+        &f.graph,
+        &f.topology,
+        &f.risk,
+        &f.target,
+        &[report],
+        pinned,
+        &limits,
+    )
+    .unwrap();
+}
+
+
+
+#[test]
+fn peer_advertisements_without_authenticated_negotiation_cannot_complete_plan(){
+    let mut f=fixture(&["a","b"],&[],true,None);
+    let peer=peer_report(&f,false,false);
+    assert_ne!(peer.status(),CompatibilityStatus::Compatible);
+    bind_peer(&mut f,&peer);
+    let draft=build(&f,&plan(&f,2,1,&[]),&[],None,vec![]);
+    assert_eq!(draft.status(),PlanAssessmentState::Partial);
+    assert!(draft.residual_risks().iter().any(|risk|
+        risk.kind==ResidualRiskKind::PeerProtocol
+        || risk.kind==ResidualRiskKind::EvidenceQuality));
+    assert!(draft.readiness().iter().all(|u|
+        u.status != UnitReadinessStatus::EligibleForReview));
+}
+
+#[test]
+fn claimed_exception_cannot_override_prohibited_classical_fallback(){
+    let mut f=fixture(&["a","b"],&[],true,None);
+    let peer=peer_report(&f,true,false);
+    bind_peer(&mut f,&peer);
+    let wave=plan(&f,2,1,&[]);
+    assert!(wave.readiness().iter().all(|u|u.status==UnitReadinessStatus::Blocked));
+    let blocked=build(&f,&wave,&[],None,vec![]);
+    let mut exception=proposal("fallback-request");
+    exception.claimed_approval=Some(purported_approval());
+    let still_blocked=build(&f,&wave,&[],None,vec![exception]);
+    assert_eq!(blocked.status(),PlanAssessmentState::Blocked);
+    assert_eq!(still_blocked.status(),PlanAssessmentState::Blocked);
+    assert_eq!(blocked.blocker_ids(),still_blocked.blocker_ids());
+    assert_eq!(blocked.action_ids(),still_blocked.action_ids());
+    assert_eq!(still_blocked.exceptions()[0].state,
+        PlanExceptionState::ClaimedApprovalUnverified);
+}
+
+#[test]
+fn missing_certificate_chain_and_revocation_preserve_pki_residual_risk(){
+    let mut f=fixture(&["a","b"],&[],true,None);
+    let mut target=f.target.content().clone();
+    target.standards.push(StandardEdition::Fips204_2024);
+    target.algorithms.push(AlgorithmConstraint{
+        algorithm:KnownAlgorithm::MlDsa87,role:AlgorithmRole::Signature,
+        minimum_category:Some(SecurityCategory::Five),
+        disposition:ConstraintDisposition::Required,
+    });
+    target.certificates.push(CertificateConstraint{
+        profile_id:"x509-profile".into(),revision:"v1".into(),
+        signature_algorithm:KnownAlgorithm::MlDsa87,
+        specification_reference:"profile-authority".into(),
+    });
+    f.target=TargetProfile::new(target,&Limits::default(),Some(NOW)).unwrap();
+    let peer=peer_report(&f,false,true);
+    assert_ne!(peer.status(),CompatibilityStatus::Compatible);
+    bind_peer(&mut f,&peer);
+    let draft=build(&f,&plan(&f,2,1,&[]),&[],None,vec![]);
+    assert_eq!(draft.status(),PlanAssessmentState::Partial);
+    assert!(draft.residual_risks().iter().any(|risk|
+        risk.kind==ResidualRiskKind::PkiTrust
+        && risk.validation_gates.contains(&RemediationGate::ValidatePki)));
+}
