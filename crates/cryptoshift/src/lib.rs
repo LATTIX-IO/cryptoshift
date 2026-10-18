@@ -39,6 +39,7 @@ mod risk_model;
 mod standards;
 mod target;
 mod topology;
+mod wave;
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
 pub use envelope::{
@@ -97,4 +98,11 @@ pub use remediation::{
     REMEDIATION_ANALYSIS_VERSION, RemediationAction, RemediationActionKind, RemediationAnalysis,
     RemediationAnalyzer, RemediationBindings, RemediationEvidence, RemediationGate,
     RemediationOwner, RollbackRequirement,
+};
+
+// Offline, nonauthorizing SCC wave and readiness proposals (FOSS-442).
+pub use wave::{
+    WAVE_PLAN_VERSION, MigrationWave, ReadinessGate, ReadinessGateKind,
+    UnitReadiness, UnitReadinessStatus, WavePlanBindings, WavePlanDraft,
+    WavePlanRequest, WavePlanner,
 };
