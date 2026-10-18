@@ -729,7 +729,9 @@ impl RemediationAnalyzer {
                 .entry(&edge.from)
                 .or_default()
                 .insert(&edge.to);
-            owner_evidence_by_system.entry(edge.from.as_str()).or_default()
+            owner_evidence_by_system
+                .entry(edge.from.as_str())
+                .or_default()
                 .extend(edge.evidence_ids.iter().map(String::as_str));
         }
         let mut owner_by_unit = BTreeMap::<String, RemediationOwner>::new();
@@ -799,7 +801,10 @@ impl RemediationAnalyzer {
                     BlockerCode::OwnerMissing,
                     BlockerEvidenceState::Unknown,
                     BlockerSeverity::Verification,
-                    owner_evidence_by_unit.get(&unit.id).cloned().unwrap_or_default(),
+                    owner_evidence_by_unit
+                        .get(&unit.id)
+                        .cloned()
+                        .unwrap_or_default(),
                     RemediationGate::AssignOwner,
                 ),
                 RemediationOwner::Ambiguous(_) => push(
@@ -807,7 +812,10 @@ impl RemediationAnalyzer {
                     BlockerCode::OwnerAmbiguous,
                     BlockerEvidenceState::Contradicted,
                     BlockerSeverity::Verification,
-                    owner_evidence_by_unit.get(&unit.id).cloned().unwrap_or_default(),
+                    owner_evidence_by_unit
+                        .get(&unit.id)
+                        .cloned()
+                        .unwrap_or_default(),
                     RemediationGate::AssignOwner,
                 ),
                 RemediationOwner::Claimed(_) => {}
@@ -859,18 +867,20 @@ impl RemediationAnalyzer {
                     || deadline.applies_to == target.content().scope_id
                     || deadline.applies_to == target.content().profile_id
             });
-            if let Some(deadline) = applicable_deadline.filter(|d|
-                d.due_at_unix_secs <= pinned.evaluated_at_unix_secs
-            ) {
+            if let Some(deadline) =
+                applicable_deadline.filter(|d| d.due_at_unix_secs <= pinned.evaluated_at_unix_secs)
+            {
                 push(
                     &unit.id,
                     BlockerCode::DeadlinePassed,
                     BlockerEvidenceState::Claimed,
                     BlockerSeverity::RiskReview,
-                    vec![target_reference(target),
-                         RemediationEvidence::TargetDeadline {
-                             reference_id: deadline.source_reference.clone()
-                         }],
+                    vec![
+                        target_reference(target),
+                        RemediationEvidence::TargetDeadline {
+                            reference_id: deadline.source_reference.clone(),
+                        },
+                    ],
                     RemediationGate::ReviewDeadline,
                 );
             }
