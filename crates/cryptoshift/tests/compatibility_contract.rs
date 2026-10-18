@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)] // Test fixtures intentionally assert construction success.
 //! Offline consumer acceptance for unverified peer, protocol and PKI evidence.
 use cryptoshift::*;
 
