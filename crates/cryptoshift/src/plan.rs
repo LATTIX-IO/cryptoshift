@@ -699,3 +699,158 @@ fn classify_gate(kind:ReadinessGateKind,blocker:Option<&BlockerFinding>)->Residu
 fn problem(code:DiagnosticCode,subject:&'static str,reason:&'static str)->Diagnostic{
     Diagnostic::new(code,subject,reason)
 }
+
+
+/// Stable categories of meaningful differences between immutable plans.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub enum PlanChangeKind {
+    /// Tenant/scope changed; never consider plans interchangeable.
+    Scope = 1,
+    /// Inventory source revision changed.
+    Inventory = 2,
+    /// Typed graph revision changed.
+    Graph = 3,
+    /// SCC decomposition or prerequisite topology changed.
+    Topology = 4,
+    /// Full risk-factor content changed.
+    Risk = 5,
+    /// Desired target/policy revision changed.
+    Target = 6,
+    /// D1 remediation report revision changed.
+    Remediation = 7,
+    /// Peer protocol, PKI or vendor compatibility evidence set changed.
+    CompatibilityEvidence = 8,
+    /// Candidate D2 wave content changed.
+    WavePlan = 9,
+    /// Standards catalog edition or set changed.
+    Standards = 10,
+    /// Capability catalog identity/revision/evidence changed.
+    Capabilities = 11,
+    /// Optional scoring contract identity/weights changed.
+    Scoring = 12,
+    /// Overall nonauthoritative review state changed.
+    Assessment = 13,
+    /// Wave placements, capacity or prerequisites changed.
+    WaveStructure = 14,
+    /// Source-qualified per-unit review status or gates changed.
+    UnitReadiness = 15,
+    /// D1 blocker identities were added, removed or revised.
+    Blockers = 16,
+    /// D1 action identities were added, removed or revised.
+    Actions = 17,
+    /// One or more residual-risk facets changed.
+    ResidualRisk = 18,
+    /// Exception claim, scope, expiry or state changed.
+    Exceptions = 19,
+    /// Explicit analysis timestamp changed.
+    EvaluationTime = 20,
+}
+
+/// Deterministic comparison of two immutable plan drafts.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanDiff {
+    /// Sorted typed change categories; empty means semantically identical.
+    pub changes: Vec<PlanChangeKind>,
+    /// Changed or missing SCC unit records, sorted and unique.
+    pub changed_unit_ids: Vec<String>,
+    /// Changed D1 blocker identity membership.
+    pub changed_blocker_ids: Vec<String>,
+    /// Changed D1 action identity membership.
+    pub changed_action_ids: Vec<String>,
+    /// Updated, removed or new exception request IDs.
+    pub changed_exception_ids: Vec<String>,
+    /// Source-fenced residual facet identities differing between plans.
+    pub changed_residual_ids: Vec<String>,
+}
+
+impl MigrationPlanDraft {
+    /// Compare typed semantic content instead of trusting opaque record IDs.
+    ///
+    /// A change in any input content digest is material even where no
+    /// display-level unit state or label changed.
+    pub fn semantic_diff(&self,next:&Self,limits:&Limits)->Result<PlanDiff,Diagnostic>{
+        limits.validate()?;
+        let budget=limits.checked_add(ResourceKind::PlannerCandidates,
+            self.readiness.len(),next.readiness.len())?;
+        let budget=limits.checked_add(ResourceKind::PlannerCandidates,
+            budget,self.residual_risks.len())?;
+        let budget=limits.checked_add(ResourceKind::PlannerCandidates,
+            budget,next.residual_risks.len())?;
+        limits.checked_add(ResourceKind::PlannerCandidates,budget,
+            self.exceptions.len()+next.exceptions.len())?;
+        let mut changes=BTreeSet::new();
+        let a=&self.pins;
+        let b=&next.pins;
+        if a.scope_id!=b.scope_id {changes.insert(PlanChangeKind::Scope);}
+        if a.evaluated_at_unix_secs!=b.evaluated_at_unix_secs{
+            changes.insert(PlanChangeKind::EvaluationTime);
+        }
+        for (kind,left,right) in [
+            (PlanChangeKind::Inventory,a.inventory_digest,b.inventory_digest),
+            (PlanChangeKind::Graph,a.graph_digest,b.graph_digest),
+            (PlanChangeKind::Topology,a.topology_digest,b.topology_digest),
+            (PlanChangeKind::Risk,a.risk_digest,b.risk_digest),
+            (PlanChangeKind::Target,a.target_digest,b.target_digest),
+            (PlanChangeKind::Remediation,a.remediation_digest,b.remediation_digest),
+            (PlanChangeKind::CompatibilityEvidence,
+                a.compatibility_set_digest,b.compatibility_set_digest),
+            (PlanChangeKind::WavePlan,a.wave_digest,b.wave_digest),
+            (PlanChangeKind::Capabilities,a.catalog_set_digest,b.catalog_set_digest),
+        ]{
+            if left!=right{changes.insert(kind);}
+        }
+        if a.standards_catalog_version!=b.standards_catalog_version
+            || a.standards!=b.standards{
+            changes.insert(PlanChangeKind::Standards);
+        }
+        if a.catalogs!=b.catalogs{changes.insert(PlanChangeKind::Capabilities);}
+        if a.scoring!=b.scoring{changes.insert(PlanChangeKind::Scoring);}
+        if self.status!=next.status{changes.insert(PlanChangeKind::Assessment);}
+        if self.waves!=next.waves{changes.insert(PlanChangeKind::WaveStructure);}
+
+        let mut changed_units=Vec::new();
+        let before_units:BTreeMap<&str,&UnitReadiness>=self.readiness.iter()
+            .map(|u|(u.unit_id.as_str(),u)).collect();
+        let after_units:BTreeMap<&str,&UnitReadiness>=next.readiness.iter()
+            .map(|u|(u.unit_id.as_str(),u)).collect();
+        let unit_keys:BTreeSet<&str>=before_units.keys().chain(after_units.keys()).copied().collect();
+        for id in unit_keys{
+            if before_units.get(id)!=after_units.get(id){changed_units.push(id.to_owned());}
+        }
+        if !changed_units.is_empty(){changes.insert(PlanChangeKind::UnitReadiness);}
+        let blocker_ids=symmetric_ids(&self.blockers,&next.blockers);
+        if !blocker_ids.is_empty(){changes.insert(PlanChangeKind::Blockers);}
+        let action_ids=symmetric_ids(&self.actions,&next.actions);
+        if !action_ids.is_empty(){changes.insert(PlanChangeKind::Actions);}
+        let before_facets:BTreeSet<&str>=self.residual_risks.iter().map(|f|f.id.as_str()).collect();
+        let after_facets:BTreeSet<&str>=next.residual_risks.iter().map(|f|f.id.as_str()).collect();
+        let residual_ids:Vec<String>=before_facets.symmetric_difference(&after_facets)
+            .map(|id|(*id).to_owned()).collect();
+        if !residual_ids.is_empty(){changes.insert(PlanChangeKind::ResidualRisk);}
+        let before_ex:BTreeMap<&str,&PlanExceptionRecord>=self.exceptions.iter()
+            .map(|e|(e.request.request_id.as_str(),e)).collect();
+        let after_ex:BTreeMap<&str,&PlanExceptionRecord>=next.exceptions.iter()
+            .map(|e|(e.request.request_id.as_str(),e)).collect();
+        let ex_ids:BTreeSet<&str>=before_ex.keys().chain(after_ex.keys()).copied().collect();
+        let changed_exception_ids:Vec<String>=ex_ids.into_iter()
+            .filter(|id|before_ex.get(id)!=after_ex.get(id))
+            .map(str::to_owned).collect();
+        if !changed_exception_ids.is_empty(){changes.insert(PlanChangeKind::Exceptions);}
+        let total=changed_units.len()+blocker_ids.len()+action_ids.len()
+            +residual_ids.len()+changed_exception_ids.len();
+        limits.check(ResourceKind::Diagnostics,total)?;
+        Ok(PlanDiff{
+            changes:changes.into_iter().collect(),
+            changed_unit_ids:changed_units,changed_blocker_ids:blocker_ids,
+            changed_action_ids:action_ids,changed_exception_ids,
+            changed_residual_ids:residual_ids,
+        })
+    }
+}
+
+fn symmetric_ids(a:&[String],b:&[String])->Vec<String>{
+    let a:BTreeSet<&str>=a.iter().map(String::as_str).collect();
+    let b:BTreeSet<&str>=b.iter().map(String::as_str).collect();
+    a.symmetric_difference(&b).map(|id|(*id).to_owned()).collect()
+}
