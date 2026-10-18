@@ -170,7 +170,17 @@ pub enum RemediationOwner {
     Ambiguous(Vec<String>),
 }
 
-/// Rollback/maintenance requirement attached to an *advisory* action.
+/// Maintenance precondition for any later externally authorized change.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum MaintenanceRequirement {
+    /// Collecting or reviewing evidence requires no service maintenance window.
+    EvidenceOnly = 1,
+    /// A separately approved maintenance window is required before a migration.
+    ReviewedWindowRequired = 2,
+}
+
+/// Rollback requirement attached to an *advisory* action.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum RollbackRequirement {
@@ -218,7 +228,9 @@ pub struct RemediationAction {
     pub owner: RemediationOwner,
     /// Required evidence gates; completing a task does not waive these.
     pub validation_gates: Vec<RemediationGate>,
-    /// Future maintenance/rollback authorization obligation.
+    /// Future separately authorized maintenance precondition.
+    pub maintenance: MaintenanceRequirement,
+    /// Future external rollback approval obligation.
     pub rollback: RollbackRequirement,
     /// A proposed change cannot proceed without separate change approval.
     pub change_approval_required: bool,
@@ -668,8 +680,9 @@ impl RemediationAnalyzer {
             let value = pending
                 .entry((unit.to_owned(), code))
                 .or_insert_with(|| (state, severity, BTreeSet::new(), BTreeSet::new()));
-            // Preserve strongest failure state where findings of one kind differ.
-            if state > value.0 {
+            // A prohibiting conflict must never be replaced by a weaker
+            // source claim during canonical evidence aggregation.
+            if evidence_rank(state) > evidence_rank(value.0) {
                 value.0 = state;
             }
             if severity < value.1 {
@@ -895,6 +908,7 @@ impl RemediationAnalyzer {
                 prerequisite_action_ids: vec![],
                 owner: owner.clone(),
                 validation_gates: gates.clone(),
+                maintenance: MaintenanceRequirement::EvidenceOnly,
                 rollback: RollbackRequirement::EvidenceOnly,
                 change_approval_required: matches!(
                     action_kind,
@@ -970,6 +984,7 @@ impl RemediationAnalyzer {
                 prerequisite_action_ids: before,
                 owner,
                 validation_gates: vec![RemediationGate::ReviewUnitReadiness],
+                maintenance: MaintenanceRequirement::ReviewedWindowRequired,
                 rollback: RollbackRequirement::ReviewedPlanRequired,
                 change_approval_required: true,
                 evidence: vec![],
@@ -1079,6 +1094,15 @@ fn deadline_for(target: &TargetProfile, unit: &str) -> Option<i64> {
                 || deadline.applies_to == target.content().profile_id
         })
         .map(|deadline| deadline.due_at_unix_secs)
+}
+
+fn evidence_rank(value: BlockerEvidenceState) -> u8 {
+    match value {
+        BlockerEvidenceState::Claimed => 1,
+        BlockerEvidenceState::Unknown => 2,
+        BlockerEvidenceState::Contradicted => 3,
+        BlockerEvidenceState::Prohibited => 4,
+    }
 }
 
 fn classify_compat(
@@ -1413,7 +1437,7 @@ impl<'a> Encoder<'a> {
         self.strings(&action.prerequisite_action_ids)?;
         self.owner(&action.owner)?;
         self.gates(&action.validation_gates)?;
-        self.raw(&[action.rollback as u8])?;
+        self.raw(&[action.maintenance as u8, action.rollback as u8])?;
         self.flag(action.change_approval_required)?;
         self.evidences(&action.evidence)?;
         if let Some(due) = action.due_at_unix_secs {
