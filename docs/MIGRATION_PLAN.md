@@ -11,6 +11,8 @@
 
 ## Source citations and risk
 
+Every `ResidualRiskFacet` includes a typed `PlanFacetSubject` for capability catalog/record identity or exception request/target-constraint identity. A single vendor document or justification can support multiple distinct facts without collapsing their risk IDs. The canonical export and per-facet SHA-256 include these typed subject fields.
+
 Every `ResidualRiskFacet` has a typed risk/approval category, the exact SCC (if any), original D1 blocker/action IDs where applicable, the original inventory, external capability, compatibility or exception source/evidence/revision tuple, required verification gates and source-defined deadline if present. Source evidence is attributable **not authenticated**.
 
 The risk register preserves policy/quantum/context issues, missing owner, peer/PKI uncertainty, vendor availability, dependency prerequisites, data-quality gaps, explicit change approval, maintenance and rollback requirements. `DependsOn` is an operational prerequisite only; it cannot establish a cryptographic handshake. Unsatisfied `Unverified` and `Blocked` D2 units stay unresolved in D3. No residual-risk facet supplies a guessed probability or treats unknown risk as zero.
