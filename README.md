@@ -8,12 +8,22 @@ Project website: https://lattix.io
 
 ## Status
 
-This project is a **non-publishable bootstrap workspace**. There is no usable
-migration-planning API yet. No public crates.io release is authorized.
+This project is an **unpublished development workspace** with versioned Rust
+contracts for inventory, cryptographic dependency topology, risk, target
+profiles, product capabilities and conservative peer compatibility analysis.
+It does **not yet generate a full MigrationPlan** or authenticate protocol/PKI
+proofs. No public crates.io release is authorized.
 
 ## Crates
 
-- cryptoshift
+- cryptoshift — offline evidence-bound analysis library (unpublished)
+
+## Acceptance examples
+
+    cargo run -p cryptoshift --example capability_catalog --locked
+    cargo run -p cryptoshift --example peer_compatibility --locked
+
+See [the peer compatibility contract](docs/PEER_COMPATIBILITY.md) for evidence and authorization limitations.
 
 ## Development
 
