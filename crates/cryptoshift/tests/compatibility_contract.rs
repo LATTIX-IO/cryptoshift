@@ -755,3 +755,36 @@ fn all_known_algorithm_candidates_remain_non_authoritative() {
         assert_ne!(report.status(), CompatibilityStatus::Compatible);
     }
 }
+
+#[test]
+fn hybrid_without_negotiated_combiner_remains_unknown() {
+    let (g, t, l, r, mut req) = fixture();
+    let target = with_hybrid(&t, &mut req);
+    req.observations = vec![link()];
+    let report = analyze(&g, &target, &l, &r, &req).unwrap();
+    assert_eq!(report.status(), CompatibilityStatus::Unknown);
+    assert!(has(&report, CompatibilityCode::HybridProofMissing));
+    assert!(report
+        .prerequisites()
+        .contains(&CompatibilityPrerequisite::VerifyHybrid));
+}
+
+#[test]
+fn hybrid_with_matching_handshake_but_no_required_pki_remains_unknown() {
+    let (g, t, l, r, mut req) = fixture();
+    let hybrid = with_hybrid(&t, &mut req);
+    let target = with_certificate(&hybrid, &mut req);
+    let mut hand = negotiation();
+    if let CompatibilityObservation::Negotiation(ref mut obs) = hand {
+        obs.selected_signature = Some(KnownAlgorithm::MlDsa87);
+        obs.hybrid_companion_id = Some("X25519".into());
+        obs.hybrid_combiner_reference = Some("hybrid-combiner-v1".into());
+    }
+    req.observations = vec![link(), hand];
+    let report = analyze(&g, &target, &l, &r, &req).unwrap();
+    assert_eq!(report.status(), CompatibilityStatus::Unknown);
+    assert!(has(&report, CompatibilityCode::PkiMissing));
+    assert!(report
+        .prerequisites()
+        .contains(&CompatibilityPrerequisite::VerifyPki));
+}
