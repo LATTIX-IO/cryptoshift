@@ -622,3 +622,126 @@ fn inferred_only_negotiation_cannot_be_promoted_to_observed_wire_fact() {
         DiagnosticCode::InvalidStateTransition,
     );
 }
+
+
+#[test]
+fn graph_reference_budgets_and_identifiers_fail_before_cloning() {
+    let raw = ValidatedInventorySnapshot::new(snapshot(false, true), &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (nodes, edges) = nodes("ev-old");
+    let base = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r1",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    // Two node references plus one edge reference exceed this budget,
+    // although the *count* of edges is only one.
+    let refs_tight = Limits {
+        max_graph_edges: 2,
+        ..Limits::default()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&base, raw.digest, &refs_tight, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
+    let mut bad_nodes = nodes.clone();
+    bad_nodes[0].id = "X".repeat(257);
+    let invalid = NeutralInventoryInput {
+        nodes: &bad_nodes,
+        ..base.clone()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&invalid, raw.digest, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::InvalidIdentifier
+    );
+    // The outer inventory bytes fit, but cloned graph fields would exceed
+    // the active aggregate input budget.
+    let bytes_tight = Limits {
+        max_input_bytes: raw.bytes.len() + 1,
+        ..Limits::default()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&base, raw.digest, &bytes_tight, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
+}
+
+#[test]
+fn high_fanout_evidence_lookup_matches_only_current_observation_references() {
+    let before = project(false, true);
+    let mut current = snapshot(true, false);
+    let mut references = vec!["ev-new".to_owned()];
+    for i in 0..128 {
+        let id = format!("ev-extra-{i:03}");
+        current.evidence.push(EvidenceRecord {
+            id: id.clone(),
+            run_id: "scan-new".into(),
+            source_id: PRODUCER.into(),
+            basis: EvidenceBasis::Direct,
+            confidence_bps: 9000,
+            observed_at_unix_secs: NOW - 10,
+        });
+        current.observations[0].evidence_ids.push(id.clone());
+        references.push(id);
+    }
+    // Deliberately reversed incoming order to test canonicalized,
+    // binary-searchable evidence membership rather than linear scans.
+    current.observations[0].evidence_ids.reverse();
+    let raw = ValidatedInventorySnapshot::new(current, &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (nodes, edges) = nodes("ev-new");
+    let input_doc = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r2",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    let after = NeutralInventoryAdapter::project(
+        &input_doc,
+        raw.digest,
+        &Limits::default(),
+        NOW,
+    )
+    .unwrap();
+    references.reverse();
+    let mut modified = claim(NeutralChangeKind::ObservationModified, Some("obs-proto"), "srv");
+    modified.evidence_ids = references;
+    let result = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, vec![modified]),
+        &Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(result.changes().len(), 1);
+    assert_eq!(result.changes()[0].evidence_ids.len(), 129);
+}
