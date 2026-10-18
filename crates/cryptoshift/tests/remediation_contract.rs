@@ -1014,3 +1014,52 @@ fn distinct_candidates_for_same_peers_are_not_automatically_conflicting() {
     let forbidden = BlockerCode::Compatibility(CompatibilityCode::DowngradeRejected);
     assert!(has(&report, "a", forbidden));
 }
+
+#[test]
+fn changing_compatibility_evidence_rotates_individual_blocker_and_action_ids() {
+    let f = fixture(false, false);
+    let before = run(&f, &[]).unwrap();
+    let candidate = peer_analysis(&f, false);
+    let after = run(&f, &[&candidate]).unwrap();
+    assert_eq!(before.bindings(), after.bindings());
+    assert_ne!(
+        before.compatibility_set_digest(),
+        after.compatibility_set_digest()
+    );
+    let previous = before
+        .blockers()
+        .iter()
+        .find(|blocker| blocker.code == BlockerCode::OwnerMissing)
+        .unwrap();
+    let current = after
+        .blockers()
+        .iter()
+        .find(|blocker| blocker.code == BlockerCode::OwnerMissing)
+        .unwrap();
+    assert_ne!(previous.id, current.id);
+    assert_eq!(current.compatibility_set_digest, after.compatibility_set_digest());
+    let previous_gate = before
+        .actions()
+        .iter()
+        .find(|action| action.kind == RemediationActionKind::ReviewUnitGate && action.unit_id == "a")
+        .unwrap();
+    let current_gate = after
+        .actions()
+        .iter()
+        .find(|action| action.kind == RemediationActionKind::ReviewUnitGate && action.unit_id == "a")
+        .unwrap();
+    assert_ne!(previous_gate.id, current_gate.id);
+    assert_eq!(current_gate.compatibility_set_digest, after.compatibility_set_digest());
+}
+
+#[test]
+fn reordered_equivalent_compatibility_artifact_set_has_identical_ids_and_bytes() {
+    let f = fixture(true, false);
+    let standard = peer_analysis(&f, false);
+    let forbidden = peer_analysis(&f, true);
+    let first = run(&f, &[&standard, &forbidden]).unwrap();
+    let reordered = run(&f, &[&forbidden, &standard]).unwrap();
+    assert_eq!(first.compatibility_set_digest(), reordered.compatibility_set_digest());
+    assert_eq!(first.digest(), reordered.digest());
+    assert_eq!(first.export(&Limits::default()).unwrap(), reordered.export(&Limits::default()).unwrap());
+}
