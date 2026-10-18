@@ -1006,6 +1006,8 @@ impl CompatibilityAnalyzer {
             .collect();
         let prerequisites: Vec<_> = prerequisites.into_iter().collect();
         let evidence_refs: Vec<_> = source_refs.into_iter().collect();
+        limits.check(ResourceKind::Diagnostics, findings.len())?;
+        limits.check(ResourceKind::ProfileReferences, evidence_refs.len())?;
         let canonical = encode_report(
             request,
             &observations,
@@ -1240,16 +1242,35 @@ fn admit(request: &CompatibilityRequest, limits: &Limits) -> Result<(), Diagnost
     Ok(())
 }
 
-fn str_field(output: &mut Vec<u8>, value: &str) {
+trait ByteSink {
+    fn push(&mut self, byte: u8);
+    fn extend_from_slice(&mut self, bytes: &[u8]);
+}
+impl ByteSink for Vec<u8> {
+    fn push(&mut self, byte: u8) { Vec::push(self, byte); }
+    fn extend_from_slice(&mut self, bytes: &[u8]) { Vec::extend_from_slice(self, bytes); }
+}
+impl<W: ByteSink + ?Sized> ByteSink for &mut W {
+    fn push(&mut self, byte: u8) { ByteSink::push(*self, byte); }
+    fn extend_from_slice(&mut self, bytes: &[u8]) { ByteSink::extend_from_slice(*self, bytes); }
+}
+#[derive(Default)]
+struct SizeSink { len: usize }
+impl ByteSink for SizeSink {
+    fn push(&mut self, _: u8) { self.len = self.len.saturating_add(1); }
+    fn extend_from_slice(&mut self, bytes: &[u8]) { self.len = self.len.saturating_add(bytes.len()); }
+}
+
+fn str_field<W: ByteSink>(output: &mut W, value: &str) {
     output.extend_from_slice(&(value.len() as u32).to_be_bytes());
     output.extend_from_slice(value.as_bytes());
 }
 
-fn bool_field(output: &mut Vec<u8>, value: bool) {
+fn bool_field<W: ByteSink>(output: &mut W, value: bool) {
     output.push(u8::from(value));
 }
 
-fn optional_str(output: &mut Vec<u8>, value: Option<&str>) {
+fn optional_str<W: ByteSink>(output: &mut W, value: Option<&str>) {
     match value {
         Some(item) => {
             output.push(1);
@@ -1259,11 +1280,11 @@ fn optional_str(output: &mut Vec<u8>, value: Option<&str>) {
     }
 }
 
-fn optional_algorithm(output: &mut Vec<u8>, value: Option<KnownAlgorithm>) {
+fn optional_algorithm<W: ByteSink>(output: &mut W, value: Option<KnownAlgorithm>) {
     optional_str(output, value.map(KnownAlgorithm::id));
 }
 
-fn optional_digest(output: &mut Vec<u8>, digest: Option<SnapshotDigest>) {
+fn optional_digest<W: ByteSink>(output: &mut W, digest: Option<SnapshotDigest>) {
     match digest {
         Some(item) => {
             output.push(1);
@@ -1273,7 +1294,7 @@ fn optional_digest(output: &mut Vec<u8>, digest: Option<SnapshotDigest>) {
     }
 }
 
-fn encode_payload(output: &mut Vec<u8>, item: &CompatibilityObservation) {
+fn encode_payload<W: ByteSink>(output: &mut W, item: &CompatibilityObservation) {
     match item {
         CompatibilityObservation::PeerLink(value) => {
             output.push(1);
@@ -1354,7 +1375,29 @@ fn encode_report(
     evidence_refs: &[CapabilityEvidenceRef],
     limits: &Limits,
 ) -> Result<Vec<u8>, Diagnostic> {
-    let mut bytes = Vec::new();
+    // Two-pass exact size admission prevents allocating oversized output.
+    let mut size = SizeSink::default();
+    write_report(&mut size, request, observations, bindings, status, findings, prerequisites, left, right, evidence_refs);
+    limits.check(ResourceKind::ExportBytes, size.len)?;
+    let mut bytes = Vec::with_capacity(size.len);
+    write_report(&mut bytes, request, observations, bindings, status, findings, prerequisites, left, right, evidence_refs);
+    debug_assert_eq!(bytes.len(), size.len);
+    Ok(bytes)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_report<W: ByteSink>(
+    mut bytes: W,
+    request: &CompatibilityRequest,
+    observations: &[&CompatibilityObservation],
+    bindings: CompatibilityBindings,
+    status: CompatibilityStatus,
+    findings: &[CompatibilityFinding],
+    prerequisites: &[CompatibilityPrerequisite],
+    left: &CapabilityMatch,
+    right: &CapabilityMatch,
+    evidence_refs: &[CapabilityEvidenceRef],
+) {
     bytes.extend_from_slice(b"CSHIFT_COMPATIBILITY_V1");
     bytes.extend_from_slice(&COMPATIBILITY_ANALYSIS_VERSION.to_be_bytes());
     for digest in [
@@ -1475,6 +1518,4 @@ fn encode_report(
             str_field(&mut bytes, part);
         }
     }
-    limits.check(ResourceKind::ExportBytes, bytes.len())?;
-    Ok(bytes)
 }
