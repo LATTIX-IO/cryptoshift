@@ -9,7 +9,8 @@ use crate::{
     CapabilityEvidenceRef, CompatibilityAnalysis, CompatibilityCode, CompatibilityPrerequisite,
     CompatibilityStatus, DependencyTopology, Diagnostic, DiagnosticCode, EvidenceGraph,
     GraphRelation, Limits, RISK_FACTOR_VERSION, ResourceKind, RiskFactorKind, RiskFindingCode,
-    RiskLevel, RiskReport, RiskUncertainty, SnapshotDigest, TargetProfile, ValidatedInventorySnapshot,
+    RiskLevel, RiskReport, RiskUncertainty, SnapshotDigest, TargetProfile,
+    ValidatedInventorySnapshot,
 };
 
 /// Version of the immutable remediation finding, action, and export contract.
@@ -1048,7 +1049,11 @@ impl RemediationAnalyzer {
         }
         for unit in topology.units() {
             let mut before = own_action_ids.remove(&unit.id).unwrap_or_default();
-            for arc in arcs_by_dependent.get(unit.id.as_str()).into_iter().flatten() {
+            for arc in arcs_by_dependent
+                .get(unit.id.as_str())
+                .into_iter()
+                .flatten()
+            {
                 let upstream = unit_gate_ids.get(&arc.prerequisite_unit).ok_or_else(|| {
                     problem(
                         DiagnosticCode::InvalidReference,
