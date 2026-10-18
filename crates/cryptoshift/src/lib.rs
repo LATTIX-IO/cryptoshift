@@ -84,9 +84,8 @@ pub use capability::{
 // Conservative offline peer and PKI compatibility analysis.
 pub use compatibility::{
     COMPATIBILITY_ANALYSIS_VERSION, CertificateSelection, CompatibilityAnalysis,
-    CompatibilityAnalyzer, CompatibilityBindings, CompatibilityCode,
-    CompatibilityFinding, CompatibilityObservation, CompatibilityPrerequisite,
-    CompatibilityRequest, CompatibilitySource, CompatibilityStatus,
-    CompatibilitySubject, EndpointIdentity, HybridSelection,
+    CompatibilityAnalyzer, CompatibilityBindings, CompatibilityCode, CompatibilityFinding,
+    CompatibilityObservation, CompatibilityPrerequisite, CompatibilityRequest, CompatibilitySource,
+    CompatibilityStatus, CompatibilitySubject, EndpointIdentity, HybridSelection,
     NegotiationObservation, PeerLinkObservation, PkiObservation,
 };

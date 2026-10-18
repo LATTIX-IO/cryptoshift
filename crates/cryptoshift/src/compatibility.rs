@@ -7,10 +7,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    AlgorithmRole, CapabilityCatalog, CapabilityEvidenceRef, CapabilityMatch,
-    CapabilityMatchState, CapabilitySelector, CapabilityState, Diagnostic,
-    DiagnosticCode, EvidenceGraph, GraphNodeKind, KnownAlgorithm, Limits,
-    ResourceKind, SnapshotDigest, TargetDisposition, TargetProfile,
+    AlgorithmRole, CapabilityCatalog, CapabilityEvidenceRef, CapabilityMatch, CapabilityMatchState,
+    CapabilitySelector, CapabilityState, Diagnostic, DiagnosticCode, EvidenceGraph, GraphNodeKind,
+    KnownAlgorithm, Limits, ResourceKind, SnapshotDigest, TargetDisposition, TargetProfile,
 };
 
 /// Version of the immutable compatibility report and its canonical export.
@@ -214,8 +213,7 @@ impl CompatibilitySource {
     }
 
     fn stale(&self, at: i64) -> bool {
-        self.observed_at_unix_secs > at
-            || self.expires_at_unix_secs.is_some_and(|end| at >= end)
+        self.observed_at_unix_secs > at || self.expires_at_unix_secs.is_some_and(|end| at >= end)
     }
 }
 
@@ -529,13 +527,17 @@ impl CompatibilityAnalyzer {
 
         let left = initiator_catalog.match_target(
             target,
-            request.initiator.selector(&request.scope_id, request.algorithm, request.role),
+            request
+                .initiator
+                .selector(&request.scope_id, request.algorithm, request.role),
             evaluated_at_unix_secs,
             limits,
         )?;
         let right = responder_catalog.match_target(
             target,
-            request.responder.selector(&request.scope_id, request.algorithm, request.role),
+            request
+                .responder
+                .selector(&request.scope_id, request.algorithm, request.role),
             evaluated_at_unix_secs,
             limits,
         )?;
@@ -577,21 +579,41 @@ impl CompatibilityAnalyzer {
                 ) => {}
                 CapabilityMatchState::NoEvidence => {
                     uncertainty = true;
-                    add(&mut findings, which, CompatibilityCode::CapabilityMissing, &matched.evidence_refs);
+                    add(
+                        &mut findings,
+                        which,
+                        CompatibilityCode::CapabilityMissing,
+                        &matched.evidence_refs,
+                    );
                 }
                 CapabilityMatchState::Conflicting => {
                     uncertainty = true;
                     prerequisites.insert(CompatibilityPrerequisite::ReconcileEvidence);
-                    add(&mut findings, which, CompatibilityCode::CapabilityConflict, &matched.evidence_refs);
+                    add(
+                        &mut findings,
+                        which,
+                        CompatibilityCode::CapabilityConflict,
+                        &matched.evidence_refs,
+                    );
                 }
                 CapabilityMatchState::Stale => {
                     uncertainty = true;
                     prerequisites.insert(CompatibilityPrerequisite::ReconcileEvidence);
-                    add(&mut findings, which, CompatibilityCode::CapabilityStale, &matched.evidence_refs);
+                    add(
+                        &mut findings,
+                        which,
+                        CompatibilityCode::CapabilityStale,
+                        &matched.evidence_refs,
+                    );
                 }
                 CapabilityMatchState::Consistent(_) => {
                     uncertainty = true;
-                    add(&mut findings, which, CompatibilityCode::CapabilityUnproven, &matched.evidence_refs);
+                    add(
+                        &mut findings,
+                        which,
+                        CompatibilityCode::CapabilityUnproven,
+                        &matched.evidence_refs,
+                    );
                 }
             }
         }
@@ -600,12 +622,22 @@ impl CompatibilityAnalyzer {
             TargetDisposition::Forbidden => {
                 hard_block = true;
                 prerequisites.insert(CompatibilityPrerequisite::ChangeTarget);
-                add(&mut findings, CompatibilitySubject::Target, CompatibilityCode::AlgorithmForbidden, &[]);
+                add(
+                    &mut findings,
+                    CompatibilitySubject::Target,
+                    CompatibilityCode::AlgorithmForbidden,
+                    &[],
+                );
             }
             TargetDisposition::NotSpecified => {
                 uncertainty = true;
                 prerequisites.insert(CompatibilityPrerequisite::ChangeTarget);
-                add(&mut findings, CompatibilitySubject::Target, CompatibilityCode::TargetNotSpecified, &[]);
+                add(
+                    &mut findings,
+                    CompatibilitySubject::Target,
+                    CompatibilityCode::TargetNotSpecified,
+                    &[],
+                );
             }
             TargetDisposition::Required | TargetDisposition::Permitted => {}
         }
@@ -619,23 +651,39 @@ impl CompatibilityAnalyzer {
         if protocol.is_none() {
             hard_block = true;
             prerequisites.insert(CompatibilityPrerequisite::ChangeTarget);
-            add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::ProtocolNotApproved, &[]);
+            add(
+                &mut findings,
+                CompatibilitySubject::Protocol,
+                CompatibilityCode::ProtocolNotApproved,
+                &[],
+            );
         }
 
-        let requested_hybrid = request.hybrid.as_ref().map(|item| {
-            (&item.companion_algorithm_id, &item.combiner_reference)
-        });
+        let requested_hybrid = request
+            .hybrid
+            .as_ref()
+            .map(|item| (&item.companion_algorithm_id, &item.combiner_reference));
         let approved_hybrid = protocol
             .and_then(|item| item.hybrid.as_ref())
             .map(|item| (&item.companion_algorithm_id, &item.combiner_reference));
         if requested_hybrid != approved_hybrid {
             hard_block = true;
             prerequisites.insert(CompatibilityPrerequisite::ChangeTarget);
-            add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::HybridNotApproved, &[]);
+            add(
+                &mut findings,
+                CompatibilitySubject::Protocol,
+                CompatibilityCode::HybridNotApproved,
+                &[],
+            );
         }
         if request.classical_fallback {
             hard_block = true;
-            add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::DowngradeRejected, &[]);
+            add(
+                &mut findings,
+                CompatibilitySubject::Protocol,
+                CompatibilityCode::DowngradeRejected,
+                &[],
+            );
         }
 
         if let Some(cert) = &request.certificate {
@@ -648,12 +696,22 @@ impl CompatibilityAnalyzer {
             {
                 hard_block = true;
                 prerequisites.insert(CompatibilityPrerequisite::ChangeTarget);
-                add(&mut findings, CompatibilitySubject::Pki, CompatibilityCode::CertificateNotApproved, &[]);
+                add(
+                    &mut findings,
+                    CompatibilitySubject::Pki,
+                    CompatibilityCode::CertificateNotApproved,
+                    &[],
+                );
             }
         } else if !target.content().certificates.is_empty() {
             uncertainty = true;
             prerequisites.insert(CompatibilityPrerequisite::VerifyPki);
-            add(&mut findings, CompatibilitySubject::Pki, CompatibilityCode::PkiMissing, &[]);
+            add(
+                &mut findings,
+                CompatibilitySubject::Pki,
+                CompatibilityCode::PkiMissing,
+                &[],
+            );
         }
 
         let mut link_claims = BTreeSet::new();
@@ -664,10 +722,15 @@ impl CompatibilityAnalyzer {
         let mut has_pki = false;
         let mut selected_hybrid = false;
 
-        let mut observations: Vec<&CompatibilityObservation> = request.observations.iter().collect();
+        let mut observations: Vec<&CompatibilityObservation> =
+            request.observations.iter().collect();
         observations.sort_by_key(|item| {
             let source = item.source();
-            (&source.source_id, &source.evidence_id, &source.source_revision)
+            (
+                &source.source_id,
+                &source.evidence_id,
+                &source.source_revision,
+            )
         });
         for observation in &observations {
             let source = observation.source();
@@ -676,7 +739,12 @@ impl CompatibilityAnalyzer {
             if source.stale(evaluated_at_unix_secs) {
                 uncertainty = true;
                 prerequisites.insert(CompatibilityPrerequisite::ReconcileEvidence);
-                add(&mut findings, subject_of(observation), CompatibilityCode::EvidenceStale, &[reference]);
+                add(
+                    &mut findings,
+                    subject_of(observation),
+                    CompatibilityCode::EvidenceStale,
+                    &[reference],
+                );
                 continue;
             }
 
@@ -691,7 +759,12 @@ impl CompatibilityAnalyzer {
                         || item.protocol_revision != request.protocol_revision
                     {
                         uncertainty = true;
-                        add(&mut findings, CompatibilitySubject::PeerLink, CompatibilityCode::EvidenceBindingMismatch, &[reference]);
+                        add(
+                            &mut findings,
+                            CompatibilitySubject::PeerLink,
+                            CompatibilityCode::EvidenceBindingMismatch,
+                            &[reference],
+                        );
                         continue;
                     }
                     has_link = true;
@@ -706,7 +779,12 @@ impl CompatibilityAnalyzer {
                         || item.extension_revision != request.extension_revision
                     {
                         uncertainty = true;
-                        add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::EvidenceBindingMismatch, &[reference]);
+                        add(
+                            &mut findings,
+                            CompatibilitySubject::Protocol,
+                            CompatibilityCode::EvidenceBindingMismatch,
+                            &[reference],
+                        );
                         continue;
                     }
                     has_negotiation = true;
@@ -718,25 +796,49 @@ impl CompatibilityAnalyzer {
                         || !valid_negotiated_signature(item, request)
                     {
                         uncertainty = true;
-                        add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::NegotiationMismatch, &[reference.clone()]);
+                        add(
+                            &mut findings,
+                            CompatibilitySubject::Protocol,
+                            CompatibilityCode::NegotiationMismatch,
+                            &[reference.clone()],
+                        );
                     }
                     if item.classical_fallback_used {
                         hard_block = true;
-                        add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::DowngradeRejected, &[reference.clone()]);
+                        add(
+                            &mut findings,
+                            CompatibilitySubject::Protocol,
+                            CompatibilityCode::DowngradeRejected,
+                            &[reference.clone()],
+                        );
                     }
                     if let Some(hybrid) = &request.hybrid {
-                        if item.hybrid_companion_id.as_deref() == Some(hybrid.companion_algorithm_id.as_str())
-                            && item.hybrid_combiner_reference.as_deref() == Some(hybrid.combiner_reference.as_str())
+                        if item.hybrid_companion_id.as_deref()
+                            == Some(hybrid.companion_algorithm_id.as_str())
+                            && item.hybrid_combiner_reference.as_deref()
+                                == Some(hybrid.combiner_reference.as_str())
                         {
                             selected_hybrid = true;
                         } else {
                             uncertainty = true;
                             prerequisites.insert(CompatibilityPrerequisite::VerifyHybrid);
-                            add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::HybridProofMissing, &[reference]);
+                            add(
+                                &mut findings,
+                                CompatibilitySubject::Protocol,
+                                CompatibilityCode::HybridProofMissing,
+                                &[reference],
+                            );
                         }
-                    } else if item.hybrid_companion_id.is_some() || item.hybrid_combiner_reference.is_some() {
+                    } else if item.hybrid_companion_id.is_some()
+                        || item.hybrid_combiner_reference.is_some()
+                    {
                         uncertainty = true;
-                        add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::NegotiationMismatch, &[reference]);
+                        add(
+                            &mut findings,
+                            CompatibilitySubject::Protocol,
+                            CompatibilityCode::NegotiationMismatch,
+                            &[reference],
+                        );
                     }
                 }
                 CompatibilityObservation::Pki(item) => {
@@ -745,7 +847,12 @@ impl CompatibilityAnalyzer {
                         || item.responder_runtime_id != request.responder.runtime_id
                     {
                         uncertainty = true;
-                        add(&mut findings, CompatibilitySubject::Pki, CompatibilityCode::EvidenceBindingMismatch, &[reference]);
+                        add(
+                            &mut findings,
+                            CompatibilitySubject::Pki,
+                            CompatibilityCode::EvidenceBindingMismatch,
+                            &[reference],
+                        );
                         continue;
                     }
                     has_pki = true;
@@ -759,7 +866,12 @@ impl CompatibilityAnalyzer {
                             || item.signature_algorithm != cert.signature_algorithm
                     }) {
                         uncertainty = true;
-                        add(&mut findings, CompatibilitySubject::Pki, CompatibilityCode::PkiMismatch, &[reference.clone()]);
+                        add(
+                            &mut findings,
+                            CompatibilitySubject::Pki,
+                            CompatibilityCode::PkiMismatch,
+                            &[reference.clone()],
+                        );
                     }
                     if item.validation_at_unix_secs > evaluated_at_unix_secs
                         || item.chain_valid != Some(true)
@@ -767,7 +879,12 @@ impl CompatibilityAnalyzer {
                     {
                         uncertainty = true;
                         prerequisites.insert(CompatibilityPrerequisite::VerifyRevocation);
-                        add(&mut findings, CompatibilitySubject::Pki, CompatibilityCode::PkiUnverified, &[reference]);
+                        add(
+                            &mut findings,
+                            CompatibilitySubject::Pki,
+                            CompatibilityCode::PkiUnverified,
+                            &[reference],
+                        );
                     }
                 }
             }
@@ -776,37 +893,73 @@ impl CompatibilityAnalyzer {
         if !has_link {
             uncertainty = true;
             prerequisites.insert(CompatibilityPrerequisite::VerifyPeerLink);
-            add(&mut findings, CompatibilitySubject::PeerLink, CompatibilityCode::PeerLinkMissing, &[]);
+            add(
+                &mut findings,
+                CompatibilitySubject::PeerLink,
+                CompatibilityCode::PeerLinkMissing,
+                &[],
+            );
         } else {
             prerequisites.insert(CompatibilityPrerequisite::VerifyPeerLink);
         }
         if !has_negotiation {
             prerequisites.insert(CompatibilityPrerequisite::VerifyNegotiation);
-            add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::NegotiationMissing, &[]);
+            add(
+                &mut findings,
+                CompatibilitySubject::Protocol,
+                CompatibilityCode::NegotiationMissing,
+                &[],
+            );
         } else {
             prerequisites.insert(CompatibilityPrerequisite::VerifyNegotiation);
-            let sources: Vec<_> = observations.iter().filter_map(|item| match item {
-                CompatibilityObservation::Negotiation(value) => Some(value.source.reference()),
-                _ => None,
-            }).collect();
-            add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::NegotiationUnauthenticated, &sources);
+            let sources: Vec<_> = observations
+                .iter()
+                .filter_map(|item| match item {
+                    CompatibilityObservation::Negotiation(value) => Some(value.source.reference()),
+                    _ => None,
+                })
+                .collect();
+            add(
+                &mut findings,
+                CompatibilitySubject::Protocol,
+                CompatibilityCode::NegotiationUnauthenticated,
+                &sources,
+            );
         }
         if request.certificate.is_some() {
             prerequisites.insert(CompatibilityPrerequisite::VerifyPki);
             if !has_pki {
-                add(&mut findings, CompatibilitySubject::Pki, CompatibilityCode::PkiMissing, &[]);
+                add(
+                    &mut findings,
+                    CompatibilitySubject::Pki,
+                    CompatibilityCode::PkiMissing,
+                    &[],
+                );
             } else {
-                let sources: Vec<_> = observations.iter().filter_map(|item| match item {
-                    CompatibilityObservation::Pki(value) => Some(value.source.reference()),
-                    _ => None,
-                }).collect();
-                add(&mut findings, CompatibilitySubject::Pki, CompatibilityCode::PkiUnverified, &sources);
+                let sources: Vec<_> = observations
+                    .iter()
+                    .filter_map(|item| match item {
+                        CompatibilityObservation::Pki(value) => Some(value.source.reference()),
+                        _ => None,
+                    })
+                    .collect();
+                add(
+                    &mut findings,
+                    CompatibilitySubject::Pki,
+                    CompatibilityCode::PkiUnverified,
+                    &sources,
+                );
             }
         }
         if request.hybrid.is_some() {
             prerequisites.insert(CompatibilityPrerequisite::VerifyHybrid);
             if !selected_hybrid {
-                add(&mut findings, CompatibilitySubject::Protocol, CompatibilityCode::HybridProofMissing, &[]);
+                add(
+                    &mut findings,
+                    CompatibilitySubject::Protocol,
+                    CompatibilityCode::HybridProofMissing,
+                    &[],
+                );
             }
         }
 
@@ -818,10 +971,17 @@ impl CompatibilityAnalyzer {
             if payloads.len() > 1 {
                 uncertainty = true;
                 prerequisites.insert(CompatibilityPrerequisite::ReconcileEvidence);
-                let sources: Vec<_> = observations.iter().filter(|item| subject_of(item) == subject)
+                let sources: Vec<_> = observations
+                    .iter()
+                    .filter(|item| subject_of(item) == subject)
                     .map(|item| item.source().reference())
                     .collect();
-                add(&mut findings, subject, CompatibilityCode::EvidenceConflict, &sources);
+                add(
+                    &mut findings,
+                    subject,
+                    CompatibilityCode::EvidenceConflict,
+                    &sources,
+                );
             }
         }
 
@@ -835,18 +995,27 @@ impl CompatibilityAnalyzer {
             CompatibilityStatus::Conditional
         };
 
-        let findings: Vec<_> = findings.into_iter().map(|((subject, code), refs)| {
-            CompatibilityFinding {
+        let findings: Vec<_> = findings
+            .into_iter()
+            .map(|((subject, code), refs)| CompatibilityFinding {
                 subject,
                 code,
                 evidence_refs: refs.into_iter().collect(),
-            }
-        }).collect();
+            })
+            .collect();
         let prerequisites: Vec<_> = prerequisites.into_iter().collect();
         let evidence_refs: Vec<_> = source_refs.into_iter().collect();
         let canonical = encode_report(
-            request, &observations, bindings, status, &findings, &prerequisites,
-            &left, &right, &evidence_refs, limits,
+            request,
+            &observations,
+            bindings,
+            status,
+            &findings,
+            &prerequisites,
+            &left,
+            &right,
+            &evidence_refs,
+            limits,
         )?;
         let digest = SnapshotDigest::hash(&canonical);
         Ok(CompatibilityAnalysis {
@@ -863,7 +1032,10 @@ impl CompatibilityAnalyzer {
     }
 }
 
-fn valid_negotiated_signature(item: &NegotiationObservation, request: &CompatibilityRequest) -> bool {
+fn valid_negotiated_signature(
+    item: &NegotiationObservation,
+    request: &CompatibilityRequest,
+) -> bool {
     match &request.certificate {
         Some(cert) => item.selected_signature == Some(cert.signature_algorithm),
         None => item.selected_signature.is_none(),
@@ -879,12 +1051,18 @@ fn subject_of(item: &CompatibilityObservation) -> CompatibilitySubject {
 }
 
 fn add(
-    findings: &mut BTreeMap<(CompatibilitySubject, CompatibilityCode), BTreeSet<CapabilityEvidenceRef>>,
+    findings: &mut BTreeMap<
+        (CompatibilitySubject, CompatibilityCode),
+        BTreeSet<CapabilityEvidenceRef>,
+    >,
     subject: CompatibilitySubject,
     code: CompatibilityCode,
     sources: &[CapabilityEvidenceRef],
 ) {
-    findings.entry((subject, code)).or_default().extend(sources.iter().cloned());
+    findings
+        .entry((subject, code))
+        .or_default()
+        .extend(sources.iter().cloned());
 }
 
 fn err(code: DiagnosticCode, subject: &'static str, reason: &'static str) -> Diagnostic {
@@ -894,20 +1072,34 @@ fn err(code: DiagnosticCode, subject: &'static str, reason: &'static str) -> Dia
 fn valid_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
-        && value.bytes().all(|byte| byte.is_ascii_alphanumeric() || b"._:/-".contains(&byte))
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._:/-".contains(&byte))
 }
 
 fn admit(request: &CompatibilityRequest, limits: &Limits) -> Result<(), Diagnostic> {
     limits.validate()?;
     if request.schema_version != COMPATIBILITY_ANALYSIS_VERSION {
-        return Err(err(DiagnosticCode::UnsupportedSchemaVersion, "compatibility_schema", "unsupported compatibility contract revision"));
+        return Err(err(
+            DiagnosticCode::UnsupportedSchemaVersion,
+            "compatibility_schema",
+            "unsupported compatibility contract revision",
+        ));
     }
     limits.check(ResourceKind::EvidenceRecords, request.observations.len())?;
-    limits.checked_mul(ResourceKind::PlannerCandidates, request.observations.len(), 3)?;
+    limits.checked_mul(
+        ResourceKind::PlannerCandidates,
+        request.observations.len(),
+        3,
+    )?;
     let mut bytes = 0_usize;
     let mut id = |value: &str| -> Result<(), Diagnostic> {
         if !valid_id(value) {
-            return Err(err(DiagnosticCode::InvalidIdentifier, "compatibility_identifier", "invalid or sensitive candidate identifier"));
+            return Err(err(
+                DiagnosticCode::InvalidIdentifier,
+                "compatibility_identifier",
+                "invalid or sensitive candidate identifier",
+            ));
         }
         bytes = limits.checked_add(ResourceKind::InputBytes, bytes, value.len())?;
         Ok(())
@@ -918,14 +1110,24 @@ fn admit(request: &CompatibilityRequest, limits: &Limits) -> Result<(), Diagnost
     id(&request.extension_revision)?;
     for peer in [&request.initiator, &request.responder] {
         for item in [
-            &peer.system_node_id, &peer.provider_id, &peer.product_id,
-            &peer.product_version, &peer.platform_id, &peer.runtime_id,
+            &peer.system_node_id,
+            &peer.provider_id,
+            &peer.product_id,
+            &peer.product_version,
+            &peer.platform_id,
+            &peer.runtime_id,
         ] {
             id(item)?;
         }
     }
     if let Some(cert) = &request.certificate {
-        for item in [&cert.profile_id, &cert.revision, &cert.certificate_id, &cert.chain_id, &cert.trust_anchor_id] {
+        for item in [
+            &cert.profile_id,
+            &cert.revision,
+            &cert.certificate_id,
+            &cert.chain_id,
+            &cert.trust_anchor_id,
+        ] {
             id(item)?;
         }
     }
@@ -933,40 +1135,76 @@ fn admit(request: &CompatibilityRequest, limits: &Limits) -> Result<(), Diagnost
         id(&hybrid.companion_algorithm_id)?;
         id(&hybrid.combiner_reference)?;
         if hybrid.companion_algorithm_id == request.algorithm.id() {
-            return Err(err(DiagnosticCode::InvalidStateTransition, "hybrid_companion", "hybrid companion cannot repeat primary algorithm"));
+            return Err(err(
+                DiagnosticCode::InvalidStateTransition,
+                "hybrid_companion",
+                "hybrid companion cannot repeat primary algorithm",
+            ));
         }
     }
     let mut refs = BTreeSet::new();
     for observation in &request.observations {
         let source = observation.source();
-        for item in [&source.source_id, &source.evidence_id, &source.source_revision] {
+        for item in [
+            &source.source_id,
+            &source.evidence_id,
+            &source.source_revision,
+        ] {
             id(item)?;
         }
         if let Some(reference) = &source.verification_reference {
             id(reference)?;
         }
-        if !refs.insert((&source.source_id, &source.evidence_id, &source.source_revision)) {
-            return Err(err(DiagnosticCode::DuplicateRecord, "compatibility_source", "repeated evidence identity in one source namespace"));
+        if !refs.insert((
+            &source.source_id,
+            &source.evidence_id,
+            &source.source_revision,
+        )) {
+            return Err(err(
+                DiagnosticCode::DuplicateRecord,
+                "compatibility_source",
+                "repeated evidence identity in one source namespace",
+            ));
         }
         match observation {
             CompatibilityObservation::PeerLink(item) => {
-                for value in [&item.scope_id, &item.initiator_node_id, &item.responder_node_id, &item.protocol_id, &item.protocol_revision] {
+                for value in [
+                    &item.scope_id,
+                    &item.initiator_node_id,
+                    &item.responder_node_id,
+                    &item.protocol_id,
+                    &item.protocol_revision,
+                ] {
                     id(value)?;
                 }
             }
             CompatibilityObservation::Negotiation(item) => {
                 for value in [
-                    &item.scope_id, &item.initiator_runtime_id, &item.responder_runtime_id,
-                    &item.protocol_id, &item.protocol_revision, &item.extension_revision,
+                    &item.scope_id,
+                    &item.initiator_runtime_id,
+                    &item.responder_runtime_id,
+                    &item.protocol_id,
+                    &item.protocol_revision,
+                    &item.extension_revision,
                 ] {
                     id(value)?;
                 }
                 limits.check(ResourceKind::ProfileReferences, item.initiator_offers.len())?;
                 limits.check(ResourceKind::ProfileReferences, item.responder_offers.len())?;
-                if item.initiator_offers.iter().any(|value| value.role() != request.role)
-                    || item.responder_offers.iter().any(|value| value.role() != request.role)
+                if item
+                    .initiator_offers
+                    .iter()
+                    .any(|value| value.role() != request.role)
+                    || item
+                        .responder_offers
+                        .iter()
+                        .any(|value| value.role() != request.role)
                 {
-                    return Err(err(DiagnosticCode::InvalidStateTransition, "compatibility_offers", "offered algorithm has a different cryptographic role"));
+                    return Err(err(
+                        DiagnosticCode::InvalidStateTransition,
+                        "compatibility_offers",
+                        "offered algorithm has a different cryptographic role",
+                    ));
                 }
                 if let Some(value) = &item.hybrid_companion_id {
                     id(value)?;
@@ -977,14 +1215,23 @@ fn admit(request: &CompatibilityRequest, limits: &Limits) -> Result<(), Diagnost
             }
             CompatibilityObservation::Pki(item) => {
                 for value in [
-                    &item.scope_id, &item.initiator_runtime_id, &item.responder_runtime_id,
-                    &item.profile_id, &item.revision, &item.certificate_id,
-                    &item.chain_id, &item.trust_anchor_id,
+                    &item.scope_id,
+                    &item.initiator_runtime_id,
+                    &item.responder_runtime_id,
+                    &item.profile_id,
+                    &item.revision,
+                    &item.certificate_id,
+                    &item.chain_id,
+                    &item.trust_anchor_id,
                 ] {
                     id(value)?;
                 }
                 if item.signature_algorithm.role() != AlgorithmRole::Signature {
-                    return Err(err(DiagnosticCode::InvalidStateTransition, "pki_signature", "PKI signature algorithm is not a signature"));
+                    return Err(err(
+                        DiagnosticCode::InvalidStateTransition,
+                        "pki_signature",
+                        "PKI signature algorithm is not a signature",
+                    ));
                 }
             }
         }
@@ -1030,8 +1277,11 @@ fn encode_payload(output: &mut Vec<u8>, item: &CompatibilityObservation) {
         CompatibilityObservation::PeerLink(value) => {
             output.push(1);
             for part in [
-                &value.scope_id, &value.initiator_node_id, &value.responder_node_id,
-                &value.protocol_id, &value.protocol_revision,
+                &value.scope_id,
+                &value.initiator_node_id,
+                &value.responder_node_id,
+                &value.protocol_id,
+                &value.protocol_revision,
             ] {
                 str_field(output, part);
             }
@@ -1039,8 +1289,12 @@ fn encode_payload(output: &mut Vec<u8>, item: &CompatibilityObservation) {
         CompatibilityObservation::Negotiation(value) => {
             output.push(2);
             for part in [
-                &value.scope_id, &value.initiator_runtime_id, &value.responder_runtime_id,
-                &value.protocol_id, &value.protocol_revision, &value.extension_revision,
+                &value.scope_id,
+                &value.initiator_runtime_id,
+                &value.responder_runtime_id,
+                &value.protocol_id,
+                &value.protocol_revision,
+                &value.extension_revision,
             ] {
                 str_field(output, part);
             }
@@ -1063,9 +1317,14 @@ fn encode_payload(output: &mut Vec<u8>, item: &CompatibilityObservation) {
         CompatibilityObservation::Pki(value) => {
             output.push(3);
             for part in [
-                &value.scope_id, &value.initiator_runtime_id, &value.responder_runtime_id,
-                &value.profile_id, &value.revision, &value.certificate_id,
-                &value.chain_id, &value.trust_anchor_id,
+                &value.scope_id,
+                &value.initiator_runtime_id,
+                &value.responder_runtime_id,
+                &value.profile_id,
+                &value.revision,
+                &value.certificate_id,
+                &value.chain_id,
+                &value.trust_anchor_id,
             ] {
                 str_field(output, part);
             }
@@ -1098,8 +1357,11 @@ fn encode_report(
     bytes.extend_from_slice(b"CSHIFT_COMPATIBILITY_V1");
     bytes.extend_from_slice(&COMPATIBILITY_ANALYSIS_VERSION.to_be_bytes());
     for digest in [
-        bindings.inventory_digest, bindings.graph_digest, bindings.target_digest,
-        bindings.initiator_catalog_digest, bindings.responder_catalog_digest,
+        bindings.inventory_digest,
+        bindings.graph_digest,
+        bindings.target_digest,
+        bindings.initiator_catalog_digest,
+        bindings.responder_catalog_digest,
     ] {
         bytes.extend_from_slice(&digest.as_bytes());
     }
@@ -1107,13 +1369,21 @@ fn encode_report(
     str_field(&mut bytes, &request.scope_id);
     for endpoint in [&request.initiator, &request.responder] {
         for item in [
-            &endpoint.system_node_id, &endpoint.provider_id, &endpoint.product_id,
-            &endpoint.product_version, &endpoint.platform_id, &endpoint.runtime_id,
+            &endpoint.system_node_id,
+            &endpoint.provider_id,
+            &endpoint.product_id,
+            &endpoint.product_version,
+            &endpoint.platform_id,
+            &endpoint.runtime_id,
         ] {
             str_field(&mut bytes, item);
         }
     }
-    for item in [&request.protocol_id, &request.protocol_revision, &request.extension_revision] {
+    for item in [
+        &request.protocol_id,
+        &request.protocol_revision,
+        &request.extension_revision,
+    ] {
         str_field(&mut bytes, item);
     }
     str_field(&mut bytes, request.algorithm.id());
@@ -1125,7 +1395,13 @@ fn encode_report(
     match &request.certificate {
         Some(cert) => {
             bytes.push(1);
-            for item in [&cert.profile_id, &cert.revision, &cert.certificate_id, &cert.chain_id, &cert.trust_anchor_id] {
+            for item in [
+                &cert.profile_id,
+                &cert.revision,
+                &cert.certificate_id,
+                &cert.chain_id,
+                &cert.trust_anchor_id,
+            ] {
                 str_field(&mut bytes, item);
             }
             str_field(&mut bytes, cert.signature_algorithm.id());
@@ -1149,7 +1425,11 @@ fn encode_report(
     bytes.extend_from_slice(&(observations.len() as u32).to_be_bytes());
     for item in observations {
         let source = item.source();
-        for part in [&source.source_id, &source.evidence_id, &source.source_revision] {
+        for part in [
+            &source.source_id,
+            &source.evidence_id,
+            &source.source_revision,
+        ] {
             str_field(&mut bytes, part);
         }
         bytes.extend_from_slice(&source.observed_at_unix_secs.to_be_bytes());
@@ -1171,7 +1451,11 @@ fn encode_report(
         bytes.push(finding.code as u8);
         bytes.extend_from_slice(&(finding.evidence_refs.len() as u32).to_be_bytes());
         for reference in &finding.evidence_refs {
-            for part in [&reference.source_id, &reference.evidence_id, &reference.source_revision] {
+            for part in [
+                &reference.source_id,
+                &reference.evidence_id,
+                &reference.source_revision,
+            ] {
                 str_field(&mut bytes, part);
             }
         }
@@ -1182,7 +1466,11 @@ fn encode_report(
     }
     bytes.extend_from_slice(&(evidence_refs.len() as u32).to_be_bytes());
     for reference in evidence_refs {
-        for part in [&reference.source_id, &reference.evidence_id, &reference.source_revision] {
+        for part in [
+            &reference.source_id,
+            &reference.evidence_id,
+            &reference.source_revision,
+        ] {
             str_field(&mut bytes, part);
         }
     }
