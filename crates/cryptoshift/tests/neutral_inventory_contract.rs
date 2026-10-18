@@ -616,14 +616,9 @@ fn inferred_only_negotiation_cannot_be_promoted_to_observed_wire_fact() {
         edges: &edges,
     };
     assert_eq!(
-        NeutralInventoryAdapter::project(
-            &submitted,
-            artifact.digest,
-            &Limits::default(),
-            NOW,
-        )
-        .unwrap_err()
-        .code,
+        NeutralInventoryAdapter::project(&submitted, artifact.digest, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
         DiagnosticCode::InvalidStateTransition,
     );
 }
