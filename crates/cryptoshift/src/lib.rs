@@ -102,7 +102,6 @@ pub use remediation::{
 
 // Offline, nonauthorizing SCC wave and readiness proposals (FOSS-442).
 pub use wave::{
-    WAVE_PLAN_VERSION, MigrationWave, ReadinessGate, ReadinessGateKind,
-    UnitReadiness, UnitReadinessStatus, WavePlanBindings, WavePlanDraft,
-    WavePlanRequest, WavePlanner,
+    MigrationWave, ReadinessGate, ReadinessGateKind, UnitReadiness, UnitReadinessStatus,
+    WAVE_PLAN_VERSION, WavePlanBindings, WavePlanDraft, WavePlanRequest, WavePlanner,
 };
