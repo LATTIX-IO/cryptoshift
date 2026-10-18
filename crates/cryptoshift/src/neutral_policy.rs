@@ -6,10 +6,10 @@
 
 use std::collections::BTreeSet;
 
-use crate::neutral_codec::{error, expected, identifier, NeutralWriter};
+use crate::neutral_codec::{NeutralWriter, error, expected, identifier};
 use crate::{
-    Diagnostic, DiagnosticCode, KnownAlgorithm, Limits, ResourceKind,
-    SnapshotDigest, TargetDisposition, TargetProfile,
+    Diagnostic, DiagnosticCode, KnownAlgorithm, Limits, ResourceKind, SnapshotDigest,
+    TargetDisposition, TargetProfile,
 };
 
 /// Supported Cryptoshift-neutral policy-decision fixture revision.
@@ -100,22 +100,34 @@ pub struct NeutralPolicyReview {
 impl NeutralPolicyReview {
     /// Source provenance claim (not an authenticated publisher).
     #[must_use]
-    pub fn source_id(&self) -> &str { &self.source_id }
+    pub fn source_id(&self) -> &str {
+        &self.source_id
+    }
     /// Scope/tenant, verified against immutable TargetProfile content.
     #[must_use]
-    pub fn scope_id(&self) -> &str { &self.scope_id }
+    pub fn scope_id(&self) -> &str {
+        &self.scope_id
+    }
     /// Expected target revision content identity.
     #[must_use]
-    pub const fn target_digest(&self) -> SnapshotDigest { self.target_digest }
+    pub const fn target_digest(&self) -> SnapshotDigest {
+        self.target_digest
+    }
     /// Claimed original source policy content identity.
     #[must_use]
-    pub const fn policy_digest(&self) -> SnapshotDigest { self.policy_digest }
+    pub const fn policy_digest(&self) -> SnapshotDigest {
+        self.policy_digest
+    }
     /// Original source-attributed decisions sorted by recognized algorithm.
     #[must_use]
-    pub fn decisions(&self) -> &[NeutralPolicyDecision] { &self.decisions }
+    pub fn decisions(&self) -> &[NeutralPolicyDecision] {
+        &self.decisions
+    }
     /// Canonical report digest, never an authoritative decision signature.
     #[must_use]
-    pub const fn digest(&self) -> SnapshotDigest { self.digest }
+    pub const fn digest(&self) -> SnapshotDigest {
+        self.digest
+    }
     /// Bounded canonical v1 export, not a JSON policy decoder.
     pub fn export(&self, limits: &Limits) -> Result<Vec<u8>, Diagnostic> {
         limits.check(ResourceKind::ExportBytes, self.canonical.len())?;
@@ -126,14 +138,18 @@ impl NeutralPolicyReview {
     ///
     /// The caller must independently authenticate and pin the target source.
     pub fn gate_for(
-        &self, target: &TargetProfile, algorithm_id: &str,
+        &self,
+        target: &TargetProfile,
+        algorithm_id: &str,
     ) -> Result<NeutralPolicyGate, Diagnostic> {
         target.verify_expected_digest(self.target_digest)?;
         let algorithm = KnownAlgorithm::parse_exact(algorithm_id)?;
         let target_disposition = target.disposition(algorithm_id)?;
         if target_disposition == TargetDisposition::Forbidden
-            || self.decisions.iter().any(|d| d.algorithm == algorithm
-                && d.outcome == NeutralPolicyOutcome::DenyClaimed)
+            || self
+                .decisions
+                .iter()
+                .any(|d| d.algorithm == algorithm && d.outcome == NeutralPolicyOutcome::DenyClaimed)
         {
             Ok(NeutralPolicyGate::Prohibited)
         } else {
@@ -152,8 +168,11 @@ impl NeutralPolicyReview {
     ) -> Result<Self, Diagnostic> {
         limits.validate()?;
         if input.schema_version != NEUTRAL_POLICY_VERSION {
-            return Err(error(DiagnosticCode::UnsupportedSchemaVersion, "neutral_policy_version",
-                "neutral policy schema revision is unsupported"));
+            return Err(error(
+                DiagnosticCode::UnsupportedSchemaVersion,
+                "neutral_policy_version",
+                "neutral policy schema revision is unsupported",
+            ));
         }
         for (value, subject) in [
             (&input.source_id, "neutral_policy_source"),
@@ -164,20 +183,35 @@ impl NeutralPolicyReview {
             identifier(value, subject)?;
         }
         if input.scope_id != target.content().scope_id {
-            return Err(error(DiagnosticCode::InvalidReference, "neutral_policy_scope",
-                "source policy result and target policy must share one tenant scope"));
+            return Err(error(
+                DiagnosticCode::InvalidReference,
+                "neutral_policy_scope",
+                "source policy result and target policy must share one tenant scope",
+            ));
         }
-        expected(target.digest(), input.target_digest, "neutral_policy_target")?;
+        expected(
+            target.digest(),
+            input.target_digest,
+            "neutral_policy_target",
+        )?;
         if input.policy_digest == SnapshotDigest::from_bytes([0; 32]) {
-            return Err(error(DiagnosticCode::MissingProvenance, "neutral_policy_digest",
-                "source policy digest must identify a nonempty source revision"));
+            return Err(error(
+                DiagnosticCode::MissingProvenance,
+                "neutral_policy_digest",
+                "source policy digest must identify a nonempty source revision",
+            ));
         }
         if input.expires_at_unix_secs <= input.evaluated_at_unix_secs
-            || target.content().expires_at_unix_secs
+            || target
+                .content()
+                .expires_at_unix_secs
                 .is_some_and(|expiry| input.evaluated_at_unix_secs >= expiry)
         {
-            return Err(error(DiagnosticCode::StaleCriticalProfile, "neutral_policy_freshness",
-                "source policy or target expired at declared evaluation time"));
+            return Err(error(
+                DiagnosticCode::StaleCriticalProfile,
+                "neutral_policy_freshness",
+                "source policy or target expired at declared evaluation time",
+            ));
         }
         limits.check(ResourceKind::ProfileReferences, input.decisions.len())?;
         let mut evidence_count = 0usize;
@@ -185,37 +219,59 @@ impl NeutralPolicyReview {
         for decision in &mut input.decisions {
             identifier(&decision.reason_code, "neutral_policy_reason")?;
             if !identity.insert(decision.algorithm) {
-                return Err(error(DiagnosticCode::DuplicateRecord, "neutral_policy_algorithm",
-                    "source policy has multiple mutually ambiguous outcomes for one algorithm"));
+                return Err(error(
+                    DiagnosticCode::DuplicateRecord,
+                    "neutral_policy_algorithm",
+                    "source policy has multiple mutually ambiguous outcomes for one algorithm",
+                ));
             }
             let target_state = target.disposition(decision.algorithm.id())?;
             if decision.outcome == NeutralPolicyOutcome::PermitClaimed
                 && (target_state == TargetDisposition::Forbidden
                     || target_state == TargetDisposition::NotSpecified)
             {
-                return Err(error(DiagnosticCode::InvalidStateTransition,
+                return Err(error(
+                    DiagnosticCode::InvalidStateTransition,
                     "neutral_policy_conflict",
-                    "source permit cannot override forbidden or undeclared target requirement"));
+                    "source permit cannot override forbidden or undeclared target requirement",
+                ));
             }
             if decision.evidence.is_empty()
                 && decision.outcome != NeutralPolicyOutcome::Indeterminate
             {
-                return Err(error(DiagnosticCode::MissingProvenance, "neutral_policy_evidence",
-                    "claimed permit or deny requires source-qualified evidence"));
+                return Err(error(
+                    DiagnosticCode::MissingProvenance,
+                    "neutral_policy_evidence",
+                    "claimed permit or deny requires source-qualified evidence",
+                ));
             }
             evidence_count = limits.checked_add(
-                ResourceKind::EvidenceRecords, evidence_count, decision.evidence.len(),
+                ResourceKind::EvidenceRecords,
+                evidence_count,
+                decision.evidence.len(),
             )?;
             let mut refs = BTreeSet::new();
             for evidence in &decision.evidence {
                 for (value, subject) in [
                     (&evidence.source_id, "neutral_policy_evidence_source"),
                     (&evidence.evidence_id, "neutral_policy_evidence_id"),
-                    (&evidence.source_revision, "neutral_policy_evidence_revision"),
-                ] { identifier(value, subject)?; }
-                if !refs.insert((&evidence.source_id, &evidence.evidence_id, &evidence.source_revision)) {
-                    return Err(error(DiagnosticCode::DuplicateRecord, "neutral_policy_evidence",
-                        "duplicate source/evidence/revision triple"));
+                    (
+                        &evidence.source_revision,
+                        "neutral_policy_evidence_revision",
+                    ),
+                ] {
+                    identifier(value, subject)?;
+                }
+                if !refs.insert((
+                    &evidence.source_id,
+                    &evidence.evidence_id,
+                    &evidence.source_revision,
+                )) {
+                    return Err(error(
+                        DiagnosticCode::DuplicateRecord,
+                        "neutral_policy_evidence",
+                        "duplicate source/evidence/revision triple",
+                    ));
                 }
             }
             decision.evidence.sort();
@@ -265,9 +321,17 @@ impl NeutralPolicyReview {
         expected_report_digest: SnapshotDigest,
         limits: &Limits,
     ) -> Result<Self, Diagnostic> {
-        expected(input.policy_digest, expected_policy_digest, "neutral_policy_source_digest")?;
+        expected(
+            input.policy_digest,
+            expected_policy_digest,
+            "neutral_policy_source_digest",
+        )?;
         let review = Self::new(input, target, limits)?;
-        expected(review.digest, expected_report_digest, "neutral_policy_report_digest")?;
+        expected(
+            review.digest,
+            expected_report_digest,
+            "neutral_policy_report_digest",
+        )?;
         Ok(review)
     }
 }

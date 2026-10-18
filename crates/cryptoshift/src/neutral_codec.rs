@@ -99,11 +99,7 @@ pub(crate) fn identifier(value: &str, field: &'static str) -> Result<(), Diagnos
     Ok(())
 }
 
-pub(crate) fn error(
-    code: DiagnosticCode,
-    field: &'static str,
-    reason: &'static str,
-) -> Diagnostic {
+pub(crate) fn error(code: DiagnosticCode, field: &'static str, reason: &'static str) -> Diagnostic {
     Diagnostic::new(code, field, reason)
 }
 

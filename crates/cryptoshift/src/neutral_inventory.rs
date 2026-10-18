@@ -6,14 +6,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::neutral_codec::{NeutralWriter, error, expected, identifier};
 use crate::{
-    AbsenceStatus, CollectionCompleteness, ConflictState, CryptoObservation,
-    Diagnostic, DiagnosticCode, EvidenceGraph, GraphEdge, GraphNode,
-    Limits, ResourceKind, SchemaKind, SchemaVersion, SnapshotDigest,
-    ValidatedInventorySnapshot, VersionedEnvelope, IDENTITY_VERSION,
-    NORMALIZATION_VERSION,
+    AbsenceStatus, CollectionCompleteness, ConflictState, CryptoObservation, Diagnostic,
+    DiagnosticCode, EvidenceGraph, GraphEdge, GraphNode, IDENTITY_VERSION, Limits,
+    NORMALIZATION_VERSION, ResourceKind, SchemaKind, SchemaVersion, SnapshotDigest,
+    ValidatedInventorySnapshot, VersionedEnvelope,
 };
-use crate::neutral_codec::{error, expected, identifier, NeutralWriter};
 
 /// Exact supported Cryptoshift-neutral inventory handoff revision.
 pub const NEUTRAL_INVENTORY_VERSION: u16 = 1;
@@ -70,22 +69,34 @@ pub struct NeutralInventoryProjection {
 impl NeutralInventoryProjection {
     /// Original unverified producer identity.
     #[must_use]
-    pub fn producer_id(&self) -> &str { &self.source_id }
+    pub fn producer_id(&self) -> &str {
+        &self.source_id
+    }
     /// Source-reported revision, which consumers must authenticate separately.
     #[must_use]
-    pub fn producer_revision(&self) -> &str { &self.source_revision }
+    pub fn producer_revision(&self) -> &str {
+        &self.source_revision
+    }
     /// Exact tenant scope.
     #[must_use]
-    pub fn scope_id(&self) -> &str { &self.scope_id }
+    pub fn scope_id(&self) -> &str {
+        &self.scope_id
+    }
     /// Existing fully validated inventory, preserving all evidence categories.
     #[must_use]
-    pub fn inventory(&self) -> &ValidatedInventorySnapshot { &self.inventory }
+    pub fn inventory(&self) -> &ValidatedInventorySnapshot {
+        &self.inventory
+    }
     /// Existing referentially closed graph, with no inferred peer relationships.
     #[must_use]
-    pub fn graph(&self) -> &EvidenceGraph { &self.graph }
+    pub fn graph(&self) -> &EvidenceGraph {
+        &self.graph
+    }
     /// Digests of original inventory, graph, and source-qualified handoff.
     #[must_use]
-    pub const fn pins(&self) -> NeutralInventoryPins { self.pins }
+    pub const fn pins(&self) -> NeutralInventoryPins {
+        self.pins
+    }
     /// Deterministic metadata export, explicitly NOT a standalone graph decoder.
     pub fn export(&self, limits: &Limits) -> Result<Vec<u8>, Diagnostic> {
         limits.check(ResourceKind::ExportBytes, self.canonical.len())?;
@@ -109,20 +120,28 @@ impl NeutralInventoryAdapter {
     ) -> Result<NeutralInventoryProjection, Diagnostic> {
         limits.validate()?;
         if input.schema_version != NEUTRAL_INVENTORY_VERSION {
-            return Err(error(DiagnosticCode::UnsupportedSchemaVersion, "neutral_inventory_version",
-                "neutral inventory schema revision is not supported"));
+            return Err(error(
+                DiagnosticCode::UnsupportedSchemaVersion,
+                "neutral_inventory_version",
+                "neutral inventory schema revision is not supported",
+            ));
         }
         for (value, name) in [
             (input.producer_id, "neutral_producer"),
             (input.producer_revision, "neutral_source_revision"),
             (input.scope_id, "neutral_scope"),
-        ] { identifier(value, name)?; }
+        ] {
+            identifier(value, name)?;
+        }
         if input.inventory.schema != SchemaKind::InventorySnapshot
             || input.inventory.version != SchemaVersion::V1_0
             || input.inventory.source_id != input.producer_id
         {
-            return Err(error(DiagnosticCode::InvalidReference, "neutral_inventory_envelope",
-                "producer or inventory envelope must match exact v1 handoff"));
+            return Err(error(
+                DiagnosticCode::InvalidReference,
+                "neutral_inventory_envelope",
+                "producer or inventory envelope must match exact v1 handoff",
+            ));
         }
         limits.check(ResourceKind::InputBytes, input.inventory.payload.len())?;
         limits.check(ResourceKind::GraphNodes, input.nodes.len())?;
@@ -140,23 +159,35 @@ impl NeutralInventoryAdapter {
             || body.identity_version != IDENTITY_VERSION
             || body.normalization_version != NORMALIZATION_VERSION
         {
-            return Err(error(DiagnosticCode::UnsupportedIdentityVersion,
-                "neutral_snapshot_identity", "scope/identity/normalization must match exact v1"));
+            return Err(error(
+                DiagnosticCode::UnsupportedIdentityVersion,
+                "neutral_snapshot_identity",
+                "scope/identity/normalization must match exact v1",
+            ));
         }
         for run in &body.runs {
             if run.collected_at_unix_secs > evaluated_at_unix_secs {
-                return Err(error(DiagnosticCode::InvalidStateTransition,
-                    "neutral_future_run", "future collection run cannot justify current evidence"));
+                return Err(error(
+                    DiagnosticCode::InvalidStateTransition,
+                    "neutral_future_run",
+                    "future collection run cannot justify current evidence",
+                ));
             }
         }
         for evidence in &body.evidence {
             if evidence.observed_at_unix_secs > evaluated_at_unix_secs {
-                return Err(error(DiagnosticCode::InvalidStateTransition,
-                    "neutral_future_evidence", "future observation cannot justify current evidence"));
+                return Err(error(
+                    DiagnosticCode::InvalidStateTransition,
+                    "neutral_future_evidence",
+                    "future observation cannot justify current evidence",
+                ));
             }
         }
         let graph = EvidenceGraph::new(
-            &inventory, input.nodes.to_vec(), input.edges.to_vec(), limits,
+            &inventory,
+            input.nodes.to_vec(),
+            input.edges.to_vec(),
+            limits,
         )?;
         let graph_digest = graph.fingerprint();
         let mut writer = NeutralWriter::new(b"CSHIFT_NEUTRAL_INV_V1", limits)?;
@@ -192,10 +223,21 @@ impl NeutralInventoryAdapter {
         evaluated_at_unix_secs: i64,
     ) -> Result<NeutralInventoryProjection, Diagnostic> {
         let projected = Self::project(
-            input, pinned.inventory_digest, limits, evaluated_at_unix_secs,
+            input,
+            pinned.inventory_digest,
+            limits,
+            evaluated_at_unix_secs,
         )?;
-        expected(projected.pins.graph_digest, pinned.graph_digest, "neutral_graph_digest")?;
-        expected(projected.pins.handoff_digest, pinned.handoff_digest, "neutral_handoff_digest")?;
+        expected(
+            projected.pins.graph_digest,
+            pinned.graph_digest,
+            "neutral_graph_digest",
+        )?;
+        expected(
+            projected.pins.handoff_digest,
+            pinned.handoff_digest,
+            "neutral_handoff_digest",
+        )?;
         Ok(projected)
     }
 }
@@ -263,16 +305,24 @@ pub struct NeutralChangeSet {
 impl NeutralChangeSet {
     /// Exact previous fixture identity.
     #[must_use]
-    pub const fn before_digest(&self) -> SnapshotDigest { self.before }
+    pub const fn before_digest(&self) -> SnapshotDigest {
+        self.before
+    }
     /// Exact next fixture identity.
     #[must_use]
-    pub const fn after_digest(&self) -> SnapshotDigest { self.after }
+    pub const fn after_digest(&self) -> SnapshotDigest {
+        self.after
+    }
     /// Source-qualified typed changes, sorted canonically.
     #[must_use]
-    pub fn changes(&self) -> &[NeutralChangeClaim] { &self.changes }
+    pub fn changes(&self) -> &[NeutralChangeClaim] {
+        &self.changes
+    }
     /// Complete canonical content digest (not provenance authentication).
     #[must_use]
-    pub const fn digest(&self) -> SnapshotDigest { self.digest }
+    pub const fn digest(&self) -> SnapshotDigest {
+        self.digest
+    }
     /// Bounded, stable v1 binary export for consumers and regression fixtures.
     pub fn export(&self, limits: &Limits) -> Result<Vec<u8>, Diagnostic> {
         limits.check(ResourceKind::ExportBytes, self.canonical.len())?;
@@ -292,26 +342,48 @@ impl NeutralChangeSet {
     ) -> Result<Self, Diagnostic> {
         limits.validate()?;
         if input.schema_version != NEUTRAL_CHANGE_VERSION {
-            return Err(error(DiagnosticCode::UnsupportedSchemaVersion, "neutral_changes_version",
-                "unsupported neutral ChangeSet schema"));
+            return Err(error(
+                DiagnosticCode::UnsupportedSchemaVersion,
+                "neutral_changes_version",
+                "unsupported neutral ChangeSet schema",
+            ));
         }
-        if before.scope_id != after.scope_id || before.scope_id != input.scope_id
-            || before.source_id != after.source_id || before.source_id != input.producer_id
+        if before.scope_id != after.scope_id
+            || before.scope_id != input.scope_id
+            || before.source_id != after.source_id
+            || before.source_id != input.producer_id
             || after.source_revision != input.producer_revision
             || before.source_revision == after.source_revision
         {
-            return Err(error(DiagnosticCode::InvalidReference, "neutral_delta_scope",
-                "delta must join two distinct source revisions in one producer/tenant"));
+            return Err(error(
+                DiagnosticCode::InvalidReference,
+                "neutral_delta_scope",
+                "delta must join two distinct source revisions in one producer/tenant",
+            ));
         }
-        expected(before.pins.handoff_digest, input.expected_before, "neutral_change_before")?;
-        expected(after.pins.handoff_digest, input.expected_after, "neutral_change_after")?;
+        expected(
+            before.pins.handoff_digest,
+            input.expected_before,
+            "neutral_change_before",
+        )?;
+        expected(
+            after.pins.handoff_digest,
+            input.expected_after,
+            "neutral_change_after",
+        )?;
         limits.check(ResourceKind::EvidenceRecords, input.changes.len())?;
         let old = before.inventory.snapshot();
         let next = after.inventory.snapshot();
-        let old_observations: BTreeMap<&str, &CryptoObservation> =
-            old.observations.iter().map(|o| (o.id.as_str(), o)).collect();
-        let next_observations: BTreeMap<&str, &CryptoObservation> =
-            next.observations.iter().map(|o| (o.id.as_str(), o)).collect();
+        let old_observations: BTreeMap<&str, &CryptoObservation> = old
+            .observations
+            .iter()
+            .map(|o| (o.id.as_str(), o))
+            .collect();
+        let next_observations: BTreeMap<&str, &CryptoObservation> = next
+            .observations
+            .iter()
+            .map(|o| (o.id.as_str(), o))
+            .collect();
         let runs: BTreeMap<&str, &crate::CollectionRun> =
             next.runs.iter().map(|r| (r.id.as_str(), r)).collect();
         let evidence: BTreeMap<&str, &crate::EvidenceRecord> =
@@ -319,78 +391,137 @@ impl NeutralChangeSet {
         let mut references = 0usize;
         for claim in &mut input.changes {
             references = limits.checked_add(
-                ResourceKind::GraphEdges, references, claim.evidence_ids.len(),
+                ResourceKind::GraphEdges,
+                references,
+                claim.evidence_ids.len(),
             )?;
             identifier(&claim.asset_id, "neutral_change_asset")?;
             identifier(&claim.run_id, "neutral_change_run")?;
             if let Some(id) = claim.observation_id.as_deref() {
                 identifier(id, "neutral_change_observation")?;
             }
-            let run = runs.get(claim.run_id.as_str()).ok_or_else(|| error(
-                DiagnosticCode::InvalidReference, "neutral_change_run",
-                "change refers to absent current run"))?;
+            let run = runs.get(claim.run_id.as_str()).ok_or_else(|| {
+                error(
+                    DiagnosticCode::InvalidReference,
+                    "neutral_change_run",
+                    "change refers to absent current run",
+                )
+            })?;
             if claim.evidence_ids.is_empty() {
-                return Err(error(DiagnosticCode::MissingProvenance, "neutral_change_evidence",
-                    "transition must retain at least one current source evidence reference"));
+                return Err(error(
+                    DiagnosticCode::MissingProvenance,
+                    "neutral_change_evidence",
+                    "transition must retain at least one current source evidence reference",
+                ));
             }
             let mut unique = BTreeSet::new();
             for id in &claim.evidence_ids {
                 identifier(id, "neutral_change_evidence")?;
                 if !unique.insert(id.as_str()) {
-                    return Err(error(DiagnosticCode::DuplicateRecord, "neutral_change_evidence",
-                        "duplicate evidence attribution"));
+                    return Err(error(
+                        DiagnosticCode::DuplicateRecord,
+                        "neutral_change_evidence",
+                        "duplicate evidence attribution",
+                    ));
                 }
                 if evidence.get(id.as_str()).is_none_or(|e| e.run_id != run.id) {
-                    return Err(error(DiagnosticCode::InvalidReference, "neutral_change_evidence",
-                        "change evidence is not from declared current collection run"));
+                    return Err(error(
+                        DiagnosticCode::InvalidReference,
+                        "neutral_change_evidence",
+                        "change evidence is not from declared current collection run",
+                    ));
                 }
             }
             claim.evidence_ids.sort();
-            let observation = claim.observation_id.as_deref().and_then(|id| next_observations.get(id));
+            let observation = claim
+                .observation_id
+                .as_deref()
+                .and_then(|id| next_observations.get(id));
             let valid = match claim.kind {
-                NeutralChangeKind::ObservationAdded =>
-                    observation.is_some_and(|o| o.asset_id == claim.asset_id
+                NeutralChangeKind::ObservationAdded => observation.is_some_and(|o| {
+                    o.asset_id == claim.asset_id
                         && !old_observations.contains_key(o.id.as_str())
-                        && claim.evidence_ids.iter().all(|id| o.evidence_ids.contains(id))),
-                NeutralChangeKind::ObservationModified =>
-                    observation.is_some_and(|o| o.asset_id == claim.asset_id
-                        && old_observations.get(o.id.as_str()).is_some_and(|prior| *prior != *o)
-                        && claim.evidence_ids.iter().all(|id| o.evidence_ids.contains(id))),
-                NeutralChangeKind::ObservationConflicted =>
-                    observation.is_some_and(|o| o.asset_id == claim.asset_id
+                        && claim
+                            .evidence_ids
+                            .iter()
+                            .all(|id| o.evidence_ids.contains(id))
+                }),
+                NeutralChangeKind::ObservationModified => observation.is_some_and(|o| {
+                    o.asset_id == claim.asset_id
+                        && old_observations
+                            .get(o.id.as_str())
+                            .is_some_and(|prior| *prior != *o)
+                        && claim
+                            .evidence_ids
+                            .iter()
+                            .all(|id| o.evidence_ids.contains(id))
+                }),
+                NeutralChangeKind::ObservationConflicted => observation.is_some_and(|o| {
+                    o.asset_id == claim.asset_id
                         && o.conflict != ConflictState::Uncontested
-                        && claim.evidence_ids.iter().all(|id| o.evidence_ids.contains(id))),
+                        && claim
+                            .evidence_ids
+                            .iter()
+                            .all(|id| o.evidence_ids.contains(id))
+                }),
                 NeutralChangeKind::TentativeAbsent | NeutralChangeKind::ConfirmedAbsent => {
-                    if claim.observation_id.is_some() { false } else {
+                    if claim.observation_id.is_some() {
+                        false
+                    } else {
                         let status = if claim.kind == NeutralChangeKind::ConfirmedAbsent {
                             AbsenceStatus::Confirmed
                         } else {
                             AbsenceStatus::Tentative
                         };
-                        next.absences.iter().any(|a| a.asset_id == claim.asset_id
-                            && a.run_id == run.id && a.status == status)
-                        && (status != AbsenceStatus::Confirmed
+                        next.absences.iter().any(|a| {
+                            a.asset_id == claim.asset_id && a.run_id == run.id && a.status == status
+                        }) && (status != AbsenceStatus::Confirmed
                             || (run.completeness == CollectionCompleteness::Complete
-                                && old.observations.iter().any(|o| o.asset_id == claim.asset_id)
-                                && next.observations.iter().all(|o| o.asset_id != claim.asset_id)))
+                                && old
+                                    .observations
+                                    .iter()
+                                    .any(|o| o.asset_id == claim.asset_id)
+                                && next
+                                    .observations
+                                    .iter()
+                                    .all(|o| o.asset_id != claim.asset_id)))
                     }
                 }
             };
             if !valid {
-                return Err(error(DiagnosticCode::InvalidStateTransition, "neutral_change_claim",
-                    "declared transition is not supported by both scoped snapshots"));
+                return Err(error(
+                    DiagnosticCode::InvalidStateTransition,
+                    "neutral_change_claim",
+                    "declared transition is not supported by both scoped snapshots",
+                ));
             }
         }
         input.changes.sort_by(|a, b| {
-            (&a.asset_id, a.kind, &a.observation_id, &a.run_id)
-                .cmp(&(&b.asset_id, b.kind, &b.observation_id, &b.run_id))
+            (&a.asset_id, a.kind, &a.observation_id, &a.run_id).cmp(&(
+                &b.asset_id,
+                b.kind,
+                &b.observation_id,
+                &b.run_id,
+            ))
         });
-        if input.changes.windows(2).any(|w|
-            (&w[0].asset_id, w[0].kind, &w[0].observation_id, &w[0].run_id)
-            == (&w[1].asset_id, w[1].kind, &w[1].observation_id, &w[1].run_id))
-        {
-            return Err(error(DiagnosticCode::DuplicateRecord, "neutral_change_id",
-                "repeated source-defined transition identity"));
+        if input.changes.windows(2).any(|w| {
+            (
+                &w[0].asset_id,
+                w[0].kind,
+                &w[0].observation_id,
+                &w[0].run_id,
+            ) == (
+                &w[1].asset_id,
+                w[1].kind,
+                &w[1].observation_id,
+                &w[1].run_id,
+            )
+        }) {
+            return Err(error(
+                DiagnosticCode::DuplicateRecord,
+                "neutral_change_id",
+                "repeated source-defined transition identity",
+            ));
         }
         let mut writer = NeutralWriter::new(b"CSHIFT_NEUTRAL_CHANGE_V1", limits)?;
         writer.u16(input.schema_version)?;
@@ -404,7 +535,9 @@ impl NeutralChangeSet {
             writer.string(&claim.asset_id)?;
             writer.u8(claim.kind as u8)?;
             writer.u8(u8::from(claim.observation_id.is_some()))?;
-            if let Some(id) = &claim.observation_id { writer.string(id)?; }
+            if let Some(id) = &claim.observation_id {
+                writer.string(id)?;
+            }
             writer.string(&claim.run_id)?;
             writer.strings(&claim.evidence_ids)?;
         }

@@ -121,13 +121,11 @@ pub use plan::{
 // Versioned fixture-only neutral Cryptomap/Cryptopolicy handoff (FOSS-446).
 // Not a native integration with any pending upstream transport contract.
 pub use neutral_inventory::{
-    NEUTRAL_CHANGE_VERSION, NEUTRAL_INVENTORY_VERSION, NeutralChangeClaim,
-    NeutralChangeKind, NeutralChangeSet, NeutralChangeSetInput,
-    NeutralInventoryAdapter, NeutralInventoryInput, NeutralInventoryPins,
-    NeutralInventoryProjection,
+    NEUTRAL_CHANGE_VERSION, NEUTRAL_INVENTORY_VERSION, NeutralChangeClaim, NeutralChangeKind,
+    NeutralChangeSet, NeutralChangeSetInput, NeutralInventoryAdapter, NeutralInventoryInput,
+    NeutralInventoryPins, NeutralInventoryProjection,
 };
 pub use neutral_policy::{
-    NEUTRAL_POLICY_VERSION, NeutralPolicyDecision, NeutralPolicyEvidence,
-    NeutralPolicyGate, NeutralPolicyInput, NeutralPolicyOutcome,
-    NeutralPolicyReview,
+    NEUTRAL_POLICY_VERSION, NeutralPolicyDecision, NeutralPolicyEvidence, NeutralPolicyGate,
+    NeutralPolicyInput, NeutralPolicyOutcome, NeutralPolicyReview,
 };
