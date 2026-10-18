@@ -663,8 +663,6 @@ impl RemediationAnalyzer {
         }
         let mut compat_by_unit = BTreeMap::<String, Vec<&CompatibilityAnalysis>>::new();
         let mut seen_reports = BTreeSet::new();
-        let mut peers = BTreeMap::<(String, String), SnapshotDigest>::new();
-        let mut contradictory_units = BTreeSet::new();
         for analysis in compatibilities {
             let bindings = analysis.bindings();
             if bindings.inventory_digest != pinned.inventory_digest
@@ -701,18 +699,10 @@ impl RemediationAnalyzer {
                     "compatibility responder not in exact SCC topology",
                 )
             })?;
-            // A protocol evidence pair is exact to the two participating
-            // graph systems; reverse-direction observations still describe
-            // the same peer relationship for completeness accounting.
-            let pair = if a <= b {
-                (a.to_owned(), b.to_owned())
-            } else {
-                (b.to_owned(), a.to_owned())
-            };
-            if peers.insert(pair, analysis.digest()).is_some() {
-                contradictory_units.insert((*from).to_owned());
-                contradictory_units.insert((*to).to_owned());
-            }
+            // Two reports about the same graph systems may evaluate distinct
+            // protocols, target candidates, roles or temporal observations.
+            // The compatibility report itself, not the endpoint pair alone,
+            // is responsible for attributing actual evidence conflicts.
             compat_by_unit
                 .entry((*from).to_owned())
                 .or_default()
@@ -895,16 +885,6 @@ impl RemediationAnalyzer {
                 );
             }
             let report_set = compat_by_unit.get(&unit.id);
-            if contradictory_units.contains(&unit.id) {
-                push(
-                    &unit.id,
-                    BlockerCode::PeerProofUnverified,
-                    BlockerEvidenceState::Contradicted,
-                    BlockerSeverity::Verification,
-                    vec![],
-                    RemediationGate::VerifyEvidence,
-                );
-            }
             if let Some(reports) = report_set {
                 for analysis in reports {
                     let references = analysis
