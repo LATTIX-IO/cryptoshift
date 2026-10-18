@@ -719,6 +719,7 @@ impl RemediationAnalyzer {
 
         // Index owner claims once; do not scan every graph edge for each node.
         let mut owners_by_system = BTreeMap::<&str, BTreeSet<&str>>::new();
+        let mut owner_evidence_by_system = BTreeMap::<&str, BTreeSet<&str>>::new();
         for edge in graph
             .edges()
             .iter()
@@ -728,10 +729,14 @@ impl RemediationAnalyzer {
                 .entry(&edge.from)
                 .or_default()
                 .insert(&edge.to);
+            owner_evidence_by_system.entry(edge.from.as_str()).or_default()
+                .extend(edge.evidence_ids.iter().map(String::as_str));
         }
         let mut owner_by_unit = BTreeMap::<String, RemediationOwner>::new();
+        let mut owner_evidence_by_unit = BTreeMap::<String, Vec<RemediationEvidence>>::new();
         for unit in topology.units() {
             let mut owners = BTreeSet::new();
+            let mut owner_refs = BTreeSet::new();
             let mut missing = false;
             for system in &unit.system_ids {
                 let found = owners_by_system
@@ -742,6 +747,11 @@ impl RemediationAnalyzer {
                     missing = true;
                 }
                 owners.extend(found.into_iter().map(str::to_owned));
+                if let Some(evidence_ids) = owner_evidence_by_system.get(system.as_str()) {
+                    for id in evidence_ids {
+                        owner_refs.insert(inventory_evidence(id, &sources)?);
+                    }
+                }
             }
             let owner = if missing {
                 RemediationOwner::Missing
@@ -750,6 +760,7 @@ impl RemediationAnalyzer {
             } else {
                 RemediationOwner::Ambiguous(owners.into_iter().collect())
             };
+            owner_evidence_by_unit.insert(unit.id.clone(), owner_refs.into_iter().collect());
             owner_by_unit.insert(unit.id.clone(), owner);
         }
 
@@ -788,7 +799,7 @@ impl RemediationAnalyzer {
                     BlockerCode::OwnerMissing,
                     BlockerEvidenceState::Unknown,
                     BlockerSeverity::Verification,
-                    vec![],
+                    owner_evidence_by_unit.get(&unit.id).cloned().unwrap_or_default(),
                     RemediationGate::AssignOwner,
                 ),
                 RemediationOwner::Ambiguous(_) => push(
@@ -796,7 +807,7 @@ impl RemediationAnalyzer {
                     BlockerCode::OwnerAmbiguous,
                     BlockerEvidenceState::Contradicted,
                     BlockerSeverity::Verification,
-                    vec![],
+                    owner_evidence_by_unit.get(&unit.id).cloned().unwrap_or_default(),
                     RemediationGate::AssignOwner,
                 ),
                 RemediationOwner::Claimed(_) => {}
@@ -848,15 +859,18 @@ impl RemediationAnalyzer {
                     || deadline.applies_to == target.content().scope_id
                     || deadline.applies_to == target.content().profile_id
             });
-            if applicable_deadline
-                .is_some_and(|d| d.due_at_unix_secs <= pinned.evaluated_at_unix_secs)
-            {
+            if let Some(deadline) = applicable_deadline.filter(|d|
+                d.due_at_unix_secs <= pinned.evaluated_at_unix_secs
+            ) {
                 push(
                     &unit.id,
                     BlockerCode::DeadlinePassed,
                     BlockerEvidenceState::Claimed,
                     BlockerSeverity::RiskReview,
-                    vec![target_reference(target)],
+                    vec![target_reference(target),
+                         RemediationEvidence::TargetDeadline {
+                             reference_id: deadline.source_reference.clone()
+                         }],
                     RemediationGate::ReviewDeadline,
                 );
             }
