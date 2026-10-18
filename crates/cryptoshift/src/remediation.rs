@@ -8,9 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     CapabilityEvidenceRef, CompatibilityAnalysis, CompatibilityCode,
     CompatibilityPrerequisite, CompatibilityStatus, DependencyTopology, Diagnostic,
-    DiagnosticCode, EvidenceGraph, GraphNodeKind, GraphRelation, Limits,
-    ResourceKind, RiskFactorKind, RiskFindingCode, RiskLevel, RiskReport,
-    RiskUncertainty, SnapshotDigest, TargetProfile, ValidatedInventorySnapshot,
+    DiagnosticCode, EvidenceGraph, GraphRelation, Limits,
+    ResourceKind, RiskFactorKind, RiskLevel, RiskReport,
+    SnapshotDigest, TargetProfile, ValidatedInventorySnapshot,
     RISK_FACTOR_VERSION,
 };
 
@@ -535,14 +535,17 @@ impl RemediationAnalyzer {
             }
         }
 
+        // Index owner claims once; do not scan every graph edge for each node.
+        let mut owners_by_system = BTreeMap::<&str,BTreeSet<&str>>::new();
+        for edge in graph.edges().iter().filter(|edge|edge.relation==GraphRelation::OwnedBy) {
+            owners_by_system.entry(&edge.from).or_default().insert(&edge.to);
+        }
         let mut owner_by_unit = BTreeMap::<String,RemediationOwner>::new();
         for unit in topology.units() {
             let mut owners = BTreeSet::new();
             let mut missing = false;
             for system in &unit.system_ids {
-                let found: BTreeSet<_> = graph.edges().iter()
-                    .filter(|edge|edge.from==*system && edge.relation==GraphRelation::OwnedBy)
-                    .map(|edge|edge.to.as_str()).collect();
+                let found=owners_by_system.get(system.as_str()).cloned().unwrap_or_default();
                 if found.is_empty() { missing = true; }
                 owners.extend(found.into_iter().map(str::to_owned));
             }
@@ -865,12 +868,10 @@ fn verify_action_dag(actions:&[RemediationAction],limits:&Limits)->Result<(),Dia
         return Err(problem(DiagnosticCode::DuplicateRecord,"remediation_action",
             "generated action identity collision"));
     }
-    let mut by_id=BTreeMap::new();
     let mut incoming=BTreeMap::<&str,usize>::new();
     let mut fanout=BTreeMap::<&str,Vec<&str>>::new();
     let mut edge_count=0usize;
     for item in actions {
-        by_id.insert(item.id.as_str(),item);
         incoming.insert(item.id.as_str(),item.prerequisite_action_ids.len());
         edge_count=limits.checked_add(ResourceKind::PlannerCandidates,edge_count,item.prerequisite_action_ids.len())?;
         for prereq in &item.prerequisite_action_ids {
