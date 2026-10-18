@@ -296,6 +296,7 @@ fn missing_owner_and_dependency_are_never_silently_cleared() {
     assert!(!gate_b.prerequisite_action_ids.contains(&gate_a.id));
     assert!(gate_a.change_approval_required);
     assert_eq!(gate_a.rollback, RollbackRequirement::ReviewedPlanRequired);
+    assert_eq!(gate_a.maintenance, MaintenanceRequirement::ReviewedWindowRequired);
     assert_eq!(
         report.bindings().inventory_digest,
         f.inventory.export(&Limits::default()).unwrap().digest
@@ -312,6 +313,7 @@ fn every_remediation_action_is_proposal_not_execution() {
         assert!(action.due_at_unix_secs.is_none());
         if action.kind != RemediationActionKind::ReviewUnitGate {
             assert_eq!(action.rollback, RollbackRequirement::EvidenceOnly);
+            assert_eq!(action.maintenance, MaintenanceRequirement::EvidenceOnly);
         }
     }
     for blocker in report.blockers() {
