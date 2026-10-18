@@ -1219,7 +1219,7 @@ fn verify_action_dag(actions: &[RemediationAction], limits: &Limits) -> Result<(
         ready.remove(first);
         visited += 1;
         for dependent in fanout.get(first).into_iter().flat_map(|v| v.iter()) {
-            let degree = incoming.get_mut(dependent.as_str()).ok_or_else(|| {
+            let degree = incoming.get_mut(*dependent).ok_or_else(|| {
                 problem(
                     DiagnosticCode::InvalidReference,
                     "remediation_action_dependency",
