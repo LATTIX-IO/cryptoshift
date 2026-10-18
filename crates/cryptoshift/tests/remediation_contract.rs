@@ -695,6 +695,12 @@ fn explicit_source_deadline_does_not_invent_other_unit_dates() {
     let result = run(&f, &[]).unwrap();
     assert!(has(&result, "a", BlockerCode::DeadlinePassed));
     assert!(!has(&result, "b", BlockerCode::DeadlinePassed));
+    let deadline = result.blockers().iter()
+        .find(|b| b.code == BlockerCode::DeadlinePassed).unwrap();
+    assert!(deadline.evidence.iter().any(|record| matches!(
+        record, RemediationEvidence::TargetDeadline { reference_id }
+        if reference_id == "deadline-doc-1"
+    )));
     assert!(
         result
             .actions()
@@ -886,4 +892,31 @@ fn duplicate_risk_claims_and_oversized_combined_evidence_are_rejected() {
         .code,
         DiagnosticCode::ResourceLimitExceeded
     );
+}
+
+#[test]
+fn ambiguous_ownership_keeps_exact_inventory_provenance() {
+    let mut f = fixture(true, false);
+    let mut nodes = f.graph.nodes().to_vec();
+    nodes.push(GraphNode {
+        id: "owner-2".into(), kind: GraphNodeKind::Owner,
+        evidence_ids: vec!["ev-1".into()],
+        observation_id: None, observation_kind: None,
+    });
+    let mut edges = f.graph.edges().to_vec();
+    edges.push(GraphEdge {
+        from: "a".into(), to: "owner-2".into(),
+        relation: GraphRelation::OwnedBy, evidence_ids: vec!["ev-1".into()],
+    });
+    f.graph = EvidenceGraph::new(&f.inventory, nodes, edges, &Limits::default()).unwrap();
+    f.topology = DependencyAnalysis::analyze(&f.graph, &Limits::default()).unwrap();
+    f.risk = RiskAnalysis::analyze(&f.inventory,&f.graph,&f.topology,&[],&[],None,&Limits::default()).unwrap();
+    let result = run(&f, &[]).unwrap();
+    let blocker = result.blockers().iter()
+        .find(|blocker| blocker.code == BlockerCode::OwnerAmbiguous).unwrap();
+    assert!(matches!(&blocker.owner, RemediationOwner::Ambiguous(_)));
+    assert!(blocker.evidence.iter().any(|item| matches!(
+        item, RemediationEvidence::Inventory { evidence_id, .. }
+        if evidence_id == "ev-1"
+    )));
 }
