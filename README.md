@@ -11,7 +11,7 @@ Project website: https://lattix.io
 This project is an **unpublished development workspace** with versioned Rust
 contracts for inventory, cryptographic dependency topology, risk, target
 profiles, product capabilities, conservative peer compatibility, and advisory
-source-attributed SCC remediation actions.
+source-attributed SCC remediation actions, and bounded review-only migration waves.
 It does **not yet generate a full MigrationPlan** or authenticate protocol/PKI
 proofs. No public crates.io release is authorized.
 
@@ -24,8 +24,9 @@ proofs. No public crates.io release is authorized.
     cargo run -p cryptoshift --example capability_catalog --locked
     cargo run -p cryptoshift --example peer_compatibility --locked
     cargo run -p cryptoshift --example remediation_actions --locked
+    cargo run -p cryptoshift --example wave_plan --locked
 
-See the [peer compatibility contract](docs/PEER_COMPATIBILITY.md) and [remediation action contract](docs/REMEDIATION_ACTIONS.md) for evidence and authorization limitations.
+See the [peer compatibility contract](docs/PEER_COMPATIBILITY.md) and [remediation action contract](docs/REMEDIATION_ACTIONS.md) for evidence and authorization limitations. See the [candidate wave planning contract](docs/WAVE_PLANNING.md) for SCC capacity and review-only states.
 
 ## Development
 
