@@ -286,7 +286,7 @@ fn missing_owner_and_dependency_are_never_silently_cleared() {
     let report = run(&f, &[]).unwrap();
     assert!(has(&report, "a", BlockerCode::OwnerMissing));
     assert!(has(&report, "a", BlockerCode::DependencyGate));
-    assert!(has(&report, "a", BlockerCode::PeerCompatibilityMissing));
+    assert!(!has(&report, "a", BlockerCode::PeerCompatibilityMissing));
     assert!(!has(&report, "b", BlockerCode::OwnerMissing));
     let gate_a = report
         .actions()
@@ -941,7 +941,7 @@ fn ambiguous_ownership_keeps_exact_inventory_provenance() {
 }
 
 #[test]
-fn compatibility_on_one_peer_does_not_cover_another_scc_dependency() {
+fn operational_dependencies_do_not_imply_peer_protocol_communication() {
     let mut f = fixture(true, false);
     let mut nodes = f.graph.nodes().to_vec();
     nodes.push(GraphNode {
@@ -978,6 +978,23 @@ fn compatibility_on_one_peer_does_not_cover_another_scc_dependency() {
     .unwrap();
     let compat = peer_analysis(&f, false);
     let report = run(&f, &[&compat]).unwrap();
+    // Peer evidence for A/B does not establish or demand a C/B handshake.
+    assert!(has(&report, "a", BlockerCode::DependencyGate));
+    assert!(has(&report, "c", BlockerCode::DependencyGate));
+    assert!(has(&report, "a", BlockerCode::PeerProofUnverified));
+    assert!(!has(&report, "c", BlockerCode::PeerProofUnverified));
     assert!(!has(&report, "a", BlockerCode::PeerCompatibilityMissing));
-    assert!(has(&report, "c", BlockerCode::PeerCompatibilityMissing));
+    assert!(!has(&report, "c", BlockerCode::PeerCompatibilityMissing));
+}
+
+#[test]
+fn dependency_without_protocol_evidence_does_not_invent_handshake_observations() {
+    let f = fixture(true, false);
+    let report = run(&f, &[]).unwrap();
+    assert!(has(&report, "a", BlockerCode::DependencyGate));
+    assert!(!has(&report, "a", BlockerCode::PeerProofUnverified));
+    assert!(!has(&report, "a", BlockerCode::PeerCompatibilityMissing));
+    assert!(!report.blockers().iter().any(|finding|
+        matches!(finding.code, BlockerCode::Compatibility(CompatibilityCode::NegotiationMissing))
+    ));
 }
