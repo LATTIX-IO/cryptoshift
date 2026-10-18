@@ -12,17 +12,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             normalization_version: NORMALIZATION_VERSION,
             scope_id: "sample-tenant".into(),
             runs: vec![CollectionRun {
-                id: "run-1".into(), source_id: "collector".into(),
+                id: "run-1".into(),
+                source_id: "collector".into(),
                 scope_id: "sample-tenant".into(),
                 collected_at_unix_secs: at - 100,
                 completeness: CollectionCompleteness::Partial,
             }],
             evidence: vec![EvidenceRecord {
-                id: "evidence-1".into(), run_id: "run-1".into(),
-                source_id: "collector".into(), basis: EvidenceBasis::Direct,
-                confidence_bps: 9000, observed_at_unix_secs: at - 100,
+                id: "evidence-1".into(),
+                run_id: "run-1".into(),
+                source_id: "collector".into(),
+                basis: EvidenceBasis::Direct,
+                confidence_bps: 9000,
+                observed_at_unix_secs: at - 100,
             }],
-            observations: vec![], absences: vec![],
+            observations: vec![],
+            absences: vec![],
         },
         &limits,
     )?;
@@ -32,24 +37,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             id: "application".into(),
             kind: GraphNodeKind::System,
             evidence_ids: vec!["evidence-1".into()],
-            observation_id: None, observation_kind: None,
+            observation_id: None,
+            observation_kind: None,
         }],
         vec![],
         &limits,
     )?;
     let topology = DependencyAnalysis::analyze(&graph, &limits)?;
-    let risk = RiskAnalysis::analyze(
-        &inventory, &graph, &topology, &[], &[], None, &limits,
-    )?;
+    let risk = RiskAnalysis::analyze(&inventory, &graph, &topology, &[], &[], None, &limits)?;
     let target = TargetProfile::new(
         TargetProfileDraft {
             schema_version: TARGET_PROFILE_VERSION,
-            profile_id: "pqc-target".into(), revision: 1,
+            profile_id: "pqc-target".into(),
+            revision: 1,
             scope_id: "sample-tenant".into(),
             provenance: ProfileProvenance {
                 issuer_id: "policy-office".into(),
                 document_id: "approved-profile".into(),
-                revision: "v1".into(), source_digest: None,
+                revision: "v1".into(),
+                source_digest: None,
             },
             standards: vec![StandardEdition::Fips203_2024],
             algorithms: vec![AlgorithmConstraint {
@@ -65,10 +71,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 algorithm: KnownAlgorithm::MlKem1024,
                 hybrid: None,
             }],
-            certificates: vec![], cnsa20: None,
-            deadline: None, expires_at_unix_secs: Some(at + 100),
+            certificates: vec![],
+            cnsa20: None,
+            deadline: None,
+            expires_at_unix_secs: Some(at + 100),
         },
-        &limits, Some(at),
+        &limits,
+        Some(at),
     )?;
     // A production caller must independently authenticate and pin these
     // inputs. Here, everything is synthetic and created in one process.
@@ -76,18 +85,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &inventory, &graph, &topology, &risk, &target, at, &limits,
     )?;
     let report = RemediationAnalyzer::analyze(
-        &inventory, &graph, &topology, &risk, &target,
-        &[], expected, &limits,
+        &inventory,
+        &graph,
+        &topology,
+        &risk,
+        &target,
+        &[],
+        expected,
+        &limits,
     )?;
     if report.blockers().is_empty()
-        || !report.blockers().iter().any(|blocker|blocker.code==BlockerCode::OwnerMissing)
+        || !report
+            .blockers()
+            .iter()
+            .any(|blocker| blocker.code == BlockerCode::OwnerMissing)
     {
         return Err("an unowned, incomplete inventory must produce blockers".into());
     }
-    if !report.actions().iter().any(|action|
-        action.kind==RemediationActionKind::ReviewUnitGate
-        && action.change_approval_required)
-    {
+    if !report.actions().iter().any(|action| {
+        action.kind == RemediationActionKind::ReviewUnitGate && action.change_approval_required
+    }) {
         return Err("a migration unit must not be auto-authorized".into());
     }
     println!("blockers: {}", report.blockers().len());

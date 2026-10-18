@@ -6,12 +6,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    CapabilityEvidenceRef, CompatibilityAnalysis, CompatibilityCode,
-    CompatibilityPrerequisite, CompatibilityStatus, DependencyTopology, Diagnostic,
-    DiagnosticCode, EvidenceGraph, GraphRelation, Limits,
-    ResourceKind, RiskFactorKind, RiskLevel, RiskReport,
-    SnapshotDigest, TargetProfile, ValidatedInventorySnapshot,
-    RISK_FACTOR_VERSION,
+    CapabilityEvidenceRef, CompatibilityAnalysis, CompatibilityCode, CompatibilityPrerequisite,
+    CompatibilityStatus, DependencyTopology, Diagnostic, DiagnosticCode, EvidenceGraph,
+    GraphRelation, Limits, RISK_FACTOR_VERSION, ResourceKind, RiskFactorKind, RiskLevel,
+    RiskReport, SnapshotDigest, TargetProfile, ValidatedInventorySnapshot,
 };
 
 /// Version of the immutable remediation finding, action, and export contract.
@@ -289,7 +287,12 @@ impl RemediationAnalysis {
 pub struct RemediationAnalyzer;
 
 type BlockKey = (String, BlockerCode);
-type BlockValues = (BlockerEvidenceState, BlockerSeverity, BTreeSet<RemediationEvidence>, BTreeSet<RemediationGate>);
+type BlockValues = (
+    BlockerEvidenceState,
+    BlockerSeverity,
+    BTreeSet<RemediationEvidence>,
+    BTreeSet<RemediationGate>,
+);
 
 impl RemediationAnalyzer {
     /// Compute a deterministic fingerprint for the exact SCC/unit topology.
@@ -306,7 +309,7 @@ impl RemediationAnalyzer {
         enc.digest(topology.source_digest())?;
         enc.digest(topology.graph_fingerprint())?;
         let mut units: Vec<_> = topology.units().iter().collect();
-        units.sort_by(|a,b| a.id.cmp(&b.id));
+        units.sort_by(|a, b| a.id.cmp(&b.id));
         enc.count(units.len())?;
         for unit in units {
             enc.string(&unit.id)?;
@@ -315,7 +318,10 @@ impl RemediationAnalyzer {
             enc.strings(&unit.internal_dependency_evidence_ids)?;
         }
         let mut arcs: Vec<_> = topology.prerequisites().iter().collect();
-        arcs.sort_by(|a,b| (&a.dependent_unit,&a.prerequisite_unit).cmp(&(&b.dependent_unit,&b.prerequisite_unit)));
+        arcs.sort_by(|a, b| {
+            (&a.dependent_unit, &a.prerequisite_unit)
+                .cmp(&(&b.dependent_unit, &b.prerequisite_unit))
+        });
         enc.count(arcs.len())?;
         for arc in arcs {
             enc.string(&arc.dependent_unit)?;
@@ -346,7 +352,7 @@ impl RemediationAnalyzer {
             enc.flag(false)?;
         }
         let mut units: Vec<_> = risk.units.iter().collect();
-        units.sort_by(|a,b| a.unit_id.cmp(&b.unit_id));
+        units.sort_by(|a, b| a.unit_id.cmp(&b.unit_id));
         enc.count(units.len())?;
         for unit in units {
             enc.string(&unit.unit_id)?;
@@ -420,11 +426,20 @@ impl RemediationAnalyzer {
         limits.check(ResourceKind::GraphNodes, risk.units.len())?;
         limits.check(ResourceKind::EvidenceRecords, compatibilities.len())?;
         limits.checked_mul(ResourceKind::PlannerCandidates, topology.units().len(), 14)?;
-        limits.checked_add(ResourceKind::PlannerCandidates, compatibilities.len(), topology.prerequisites().len())?;
+        limits.checked_add(
+            ResourceKind::PlannerCandidates,
+            compatibilities.len(),
+            topology.prerequisites().len(),
+        )?;
 
         let actual = Self::input_bindings(
-            inventory, graph, topology, risk, target,
-            pinned.evaluated_at_unix_secs, limits
+            inventory,
+            graph,
+            topology,
+            risk,
+            target,
+            pinned.evaluated_at_unix_secs,
+            limits,
         )?;
         if pinned != actual
             || actual.inventory_digest != graph.source_digest()
@@ -433,66 +448,116 @@ impl RemediationAnalyzer {
             || actual.inventory_digest != risk.source_digest
             || actual.graph_digest != risk.graph_fingerprint
         {
-            return Err(problem(DiagnosticCode::IntegrityMismatch, "remediation_inputs",
-                "pinned inventory, graph, topology, risk and target revisions must agree"));
+            return Err(problem(
+                DiagnosticCode::IntegrityMismatch,
+                "remediation_inputs",
+                "pinned inventory, graph, topology, risk and target revisions must agree",
+            ));
         }
         if graph.source_scope_id() != inventory.snapshot().scope_id
             || graph.source_scope_id() != target.content().scope_id
         {
-            return Err(problem(DiagnosticCode::InvalidReference, "remediation_scope",
-                "inventory, graph and target tenant scopes must agree"));
+            return Err(problem(
+                DiagnosticCode::InvalidReference,
+                "remediation_scope",
+                "inventory, graph and target tenant scopes must agree",
+            ));
         }
         if risk.model_version != RISK_FACTOR_VERSION {
-            return Err(problem(DiagnosticCode::UnsupportedSchemaVersion, "remediation_risk_version",
-                "risk model version is incompatible with remediation v1"));
+            return Err(problem(
+                DiagnosticCode::UnsupportedSchemaVersion,
+                "remediation_risk_version",
+                "risk model version is incompatible with remediation v1",
+            ));
         }
-        if target.content().expires_at_unix_secs.is_some_and(|expiry| actual.evaluated_at_unix_secs >= expiry) {
-            return Err(problem(DiagnosticCode::StaleCriticalProfile, "remediation_target_expiry",
-                "target profile is expired for the explicit analysis time"));
+        if target
+            .content()
+            .expires_at_unix_secs
+            .is_some_and(|expiry| actual.evaluated_at_unix_secs >= expiry)
+        {
+            return Err(problem(
+                DiagnosticCode::StaleCriticalProfile,
+                "remediation_target_expiry",
+                "target profile is expired for the explicit analysis time",
+            ));
         }
         let snap = inventory.snapshot();
         let sources: BTreeMap<&str, _> = snap.evidence.iter().map(|v| (v.id.as_str(), v)).collect();
-        let mut unit_by_system = BTreeMap::<&str,&str>::new();
+        let mut unit_by_system = BTreeMap::<&str, &str>::new();
         let mut units = BTreeSet::new();
         for unit in topology.units() {
             units.insert(unit.id.as_str());
             for system in &unit.system_ids {
-                if unit_by_system.insert(system.as_str(), unit.id.as_str()).is_some() {
-                    return Err(problem(DiagnosticCode::DuplicateRecord,"remediation_system",
-                        "system is assigned to multiple SCC units"));
+                if unit_by_system
+                    .insert(system.as_str(), unit.id.as_str())
+                    .is_some()
+                {
+                    return Err(problem(
+                        DiagnosticCode::DuplicateRecord,
+                        "remediation_system",
+                        "system is assigned to multiple SCC units",
+                    ));
                 }
             }
         }
-        if risk.units.len()!=topology.units().len()
-            || risk.units.iter().map(|unit|unit.unit_id.as_str()).collect::<BTreeSet<_>>()!=units
+        if risk.units.len() != topology.units().len()
+            || risk
+                .units
+                .iter()
+                .map(|unit| unit.unit_id.as_str())
+                .collect::<BTreeSet<_>>()
+                != units
         {
-            return Err(problem(DiagnosticCode::InvalidReference, "remediation_risk_units",
-                "risk report must cover every exact topology SCC unit once"));
+            return Err(problem(
+                DiagnosticCode::InvalidReference,
+                "remediation_risk_units",
+                "risk report must cover every exact topology SCC unit once",
+            ));
         }
         for unit in &risk.units {
-            if unit.factors.len()!=RiskFactorKind::ALL.len() ||
-                unit.factors.iter().enumerate().any(|(index,factor)|factor.kind != RiskFactorKind::ALL[index])
+            if unit.factors.len() != RiskFactorKind::ALL.len()
+                || unit
+                    .factors
+                    .iter()
+                    .enumerate()
+                    .any(|(index, factor)| factor.kind != RiskFactorKind::ALL[index])
             {
-                return Err(problem(DiagnosticCode::InvalidStateTransition,"remediation_risk_factors",
-                    "risk factor vector has missing, duplicated or reordered dimensions"));
+                return Err(problem(
+                    DiagnosticCode::InvalidStateTransition,
+                    "remediation_risk_factors",
+                    "risk factor vector has missing, duplicated or reordered dimensions",
+                ));
             }
             for factor in &unit.factors {
                 for id in &factor.inventory_evidence_ids {
                     if !sources.contains_key(id.as_str()) {
-                        return Err(problem(DiagnosticCode::InvalidReference,"remediation_risk_evidence",
-                            "risk factor names evidence absent from the exact inventory"));
+                        return Err(problem(
+                            DiagnosticCode::InvalidReference,
+                            "remediation_risk_evidence",
+                            "risk factor names evidence absent from the exact inventory",
+                        ));
                     }
                 }
             }
-            let computed = risk.score_profile.as_ref()
-                .and_then(|profile|profile.score(&unit.factors));
+            let computed = risk
+                .score_profile
+                .as_ref()
+                .and_then(|profile| profile.score(&unit.factors));
             match (computed, &unit.score) {
-                (None,None) => {},
-                (Some(value),Some(score)) if value==score.pressure_bps
-                    && risk.score_profile.as_ref().is_some_and(|profile|
-                        score.profile_id==profile.id() && score.profile_version==profile.version()) => {},
-                _ => return Err(problem(DiagnosticCode::InvalidStateTransition,"remediation_risk_score",
-                    "risk aggregate is inconsistent with explicit factors or score profile")),
+                (None, None) => {}
+                (Some(value), Some(score))
+                    if value == score.pressure_bps
+                        && risk.score_profile.as_ref().is_some_and(|profile| {
+                            score.profile_id == profile.id()
+                                && score.profile_version == profile.version()
+                        }) => {}
+                _ => {
+                    return Err(problem(
+                        DiagnosticCode::InvalidStateTransition,
+                        "remediation_risk_score",
+                        "risk aggregate is inconsistent with explicit factors or score profile",
+                    ));
+                }
             }
             for factor in &unit.factors {
                 for reference in &factor.assessment_references {
@@ -500,508 +565,847 @@ impl RemediationAnalyzer {
                 }
             }
         }
-        let mut compat_by_unit = BTreeMap::<String,Vec<&CompatibilityAnalysis>>::new();
+        let mut compat_by_unit = BTreeMap::<String, Vec<&CompatibilityAnalysis>>::new();
         let mut seen_reports = BTreeSet::new();
-        let mut peers = BTreeMap::<(String,String),SnapshotDigest>::new();
+        let mut peers = BTreeMap::<(String, String), SnapshotDigest>::new();
         let mut contradictory_units = BTreeSet::new();
         for analysis in compatibilities {
             let bindings = analysis.bindings();
-            if bindings.inventory_digest!=pinned.inventory_digest
-                || bindings.graph_digest!=pinned.graph_digest
-                || bindings.target_digest!=pinned.target_digest
-                || bindings.evaluated_at_unix_secs!=pinned.evaluated_at_unix_secs
+            if bindings.inventory_digest != pinned.inventory_digest
+                || bindings.graph_digest != pinned.graph_digest
+                || bindings.target_digest != pinned.target_digest
+                || bindings.evaluated_at_unix_secs != pinned.evaluated_at_unix_secs
             {
-                return Err(problem(DiagnosticCode::IntegrityMismatch,"remediation_compatibility",
-                    "compatibility output is foreign, stale or independently mismatched"));
+                return Err(problem(
+                    DiagnosticCode::IntegrityMismatch,
+                    "remediation_compatibility",
+                    "compatibility output is foreign, stale or independently mismatched",
+                ));
             }
             if !seen_reports.insert(analysis.digest().as_bytes()) {
-                return Err(problem(DiagnosticCode::DuplicateRecord,"remediation_compatibility",
-                    "same compatibility artifact cannot be included twice"));
+                return Err(problem(
+                    DiagnosticCode::DuplicateRecord,
+                    "remediation_compatibility",
+                    "same compatibility artifact cannot be included twice",
+                ));
             }
             let a = analysis.initiator().system_node_id.as_str();
             let b = analysis.responder().system_node_id.as_str();
-            let from = unit_by_system.get(a).ok_or_else(||problem(DiagnosticCode::InvalidReference,
-                "remediation_peer","compatibility initiator not in exact SCC topology"))?;
-            let to = unit_by_system.get(b).ok_or_else(||problem(DiagnosticCode::InvalidReference,
-                "remediation_peer","compatibility responder not in exact SCC topology"))?;
-            let pair=(a.to_owned(),b.to_owned());
+            let from = unit_by_system.get(a).ok_or_else(|| {
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_peer",
+                    "compatibility initiator not in exact SCC topology",
+                )
+            })?;
+            let to = unit_by_system.get(b).ok_or_else(|| {
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_peer",
+                    "compatibility responder not in exact SCC topology",
+                )
+            })?;
+            let pair = (a.to_owned(), b.to_owned());
             if peers.insert(pair, analysis.digest()).is_some() {
                 contradictory_units.insert((*from).to_owned());
                 contradictory_units.insert((*to).to_owned());
             }
-            compat_by_unit.entry((*from).to_owned()).or_default().push(analysis);
-            if from!=to {
-                compat_by_unit.entry((*to).to_owned()).or_default().push(analysis);
+            compat_by_unit
+                .entry((*from).to_owned())
+                .or_default()
+                .push(analysis);
+            if from != to {
+                compat_by_unit
+                    .entry((*to).to_owned())
+                    .or_default()
+                    .push(analysis);
             }
         }
 
         // Index owner claims once; do not scan every graph edge for each node.
-        let mut owners_by_system = BTreeMap::<&str,BTreeSet<&str>>::new();
-        for edge in graph.edges().iter().filter(|edge|edge.relation==GraphRelation::OwnedBy) {
-            owners_by_system.entry(&edge.from).or_default().insert(&edge.to);
+        let mut owners_by_system = BTreeMap::<&str, BTreeSet<&str>>::new();
+        for edge in graph
+            .edges()
+            .iter()
+            .filter(|edge| edge.relation == GraphRelation::OwnedBy)
+        {
+            owners_by_system
+                .entry(&edge.from)
+                .or_default()
+                .insert(&edge.to);
         }
-        let mut owner_by_unit = BTreeMap::<String,RemediationOwner>::new();
+        let mut owner_by_unit = BTreeMap::<String, RemediationOwner>::new();
         for unit in topology.units() {
             let mut owners = BTreeSet::new();
             let mut missing = false;
             for system in &unit.system_ids {
-                let found=owners_by_system.get(system.as_str()).cloned().unwrap_or_default();
-                if found.is_empty() { missing = true; }
+                let found = owners_by_system
+                    .get(system.as_str())
+                    .cloned()
+                    .unwrap_or_default();
+                if found.is_empty() {
+                    missing = true;
+                }
                 owners.extend(found.into_iter().map(str::to_owned));
             }
-            let owner = if missing { RemediationOwner::Missing }
-                else if owners.len()==1 { RemediationOwner::Claimed(owners.into_iter().next().unwrap_or_default()) }
-                else { RemediationOwner::Ambiguous(owners.into_iter().collect()) };
-            owner_by_unit.insert(unit.id.clone(),owner);
+            let owner = if missing {
+                RemediationOwner::Missing
+            } else if owners.len() == 1 {
+                RemediationOwner::Claimed(owners.into_iter().next().unwrap_or_default())
+            } else {
+                RemediationOwner::Ambiguous(owners.into_iter().collect())
+            };
+            owner_by_unit.insert(unit.id.clone(), owner);
         }
 
-        let mut pending = BTreeMap::<BlockKey,BlockValues>::new();
-        let mut push = |unit:&str,code:BlockerCode,state:BlockerEvidenceState,
-                        severity:BlockerSeverity, evidence:Vec<RemediationEvidence>,
-                        gate:RemediationGate| {
-            let value=pending.entry((unit.to_owned(),code)).or_insert_with(||
-                (state,severity,BTreeSet::new(),BTreeSet::new()));
+        let mut pending = BTreeMap::<BlockKey, BlockValues>::new();
+        let mut push = |unit: &str,
+                        code: BlockerCode,
+                        state: BlockerEvidenceState,
+                        severity: BlockerSeverity,
+                        evidence: Vec<RemediationEvidence>,
+                        gate: RemediationGate| {
+            let value = pending
+                .entry((unit.to_owned(), code))
+                .or_insert_with(|| (state, severity, BTreeSet::new(), BTreeSet::new()));
             // Preserve strongest failure state where findings of one kind differ.
-            if state > value.0 {value.0=state;}
-            if severity < value.1 {value.1=severity;}
+            if state > value.0 {
+                value.0 = state;
+            }
+            if severity < value.1 {
+                value.1 = severity;
+            }
             value.2.extend(evidence);
             value.3.insert(gate);
         };
         for unit in topology.units() {
-            let owner=owner_by_unit.get(&unit.id).expect("owner for every topology unit");
+            let owner = owner_by_unit
+                .get(&unit.id)
+                .expect("owner for every topology unit");
             match owner {
-                RemediationOwner::Missing => push(&unit.id,BlockerCode::OwnerMissing,
-                    BlockerEvidenceState::Unknown,BlockerSeverity::Verification,vec![],RemediationGate::AssignOwner),
-                RemediationOwner::Ambiguous(_) => push(&unit.id,BlockerCode::OwnerAmbiguous,
-                    BlockerEvidenceState::Contradicted,BlockerSeverity::Verification,vec![],RemediationGate::AssignOwner),
-                RemediationOwner::Claimed(_) => {},
+                RemediationOwner::Missing => push(
+                    &unit.id,
+                    BlockerCode::OwnerMissing,
+                    BlockerEvidenceState::Unknown,
+                    BlockerSeverity::Verification,
+                    vec![],
+                    RemediationGate::AssignOwner,
+                ),
+                RemediationOwner::Ambiguous(_) => push(
+                    &unit.id,
+                    BlockerCode::OwnerAmbiguous,
+                    BlockerEvidenceState::Contradicted,
+                    BlockerSeverity::Verification,
+                    vec![],
+                    RemediationGate::AssignOwner,
+                ),
+                RemediationOwner::Claimed(_) => {}
             }
-            let risk_unit = risk.units.iter().find(|v|v.unit_id==unit.id)
-                .ok_or_else(||problem(DiagnosticCode::InvalidReference,"remediation_risk_unit",
-                    "missing required topology risk vector"))?;
+            let risk_unit = risk
+                .units
+                .iter()
+                .find(|v| v.unit_id == unit.id)
+                .ok_or_else(|| {
+                    problem(
+                        DiagnosticCode::InvalidReference,
+                        "remediation_risk_unit",
+                        "missing required topology risk vector",
+                    )
+                })?;
             for factor in &risk_unit.factors {
-                let mut refs=Vec::new();
+                let mut refs = Vec::new();
                 for id in &factor.inventory_evidence_ids {
-                    refs.push(inventory_evidence(id,&sources)?);
+                    refs.push(inventory_evidence(id, &sources)?);
                 }
-                refs.extend(factor.assessment_references.iter().map(|reference|
-                    RemediationEvidence::RiskAssessment{reference_id:reference.clone()}));
+                refs.extend(factor.assessment_references.iter().map(|reference| {
+                    RemediationEvidence::RiskAssessment {
+                        reference_id: reference.clone(),
+                    }
+                }));
                 if factor.level.is_none() || factor.uncertainty.is_some() {
-                    push(&unit.id,BlockerCode::RiskUnresolved(factor.kind),
-                        BlockerEvidenceState::Unknown,BlockerSeverity::RiskReview,
-                        refs.clone(),RemediationGate::ReviewRisk);
+                    push(
+                        &unit.id,
+                        BlockerCode::RiskUnresolved(factor.kind),
+                        BlockerEvidenceState::Unknown,
+                        BlockerSeverity::RiskReview,
+                        refs.clone(),
+                        RemediationGate::ReviewRisk,
+                    );
                 }
-                if factor.level.is_some_and(|v|v >= RiskLevel::High) {
-                    push(&unit.id,BlockerCode::RiskElevated(factor.kind),
-                        BlockerEvidenceState::Claimed,BlockerSeverity::RiskReview,
-                        refs,RemediationGate::ReviewRisk);
+                if factor.level.is_some_and(|v| v >= RiskLevel::High) {
+                    push(
+                        &unit.id,
+                        BlockerCode::RiskElevated(factor.kind),
+                        BlockerEvidenceState::Claimed,
+                        BlockerSeverity::RiskReview,
+                        refs,
+                        RemediationGate::ReviewRisk,
+                    );
                 }
             }
-            let applicable_deadline=target.content().deadline.as_ref().filter(|deadline| {
-                deadline.applies_to==unit.id
-                    || deadline.applies_to==target.content().scope_id
-                    || deadline.applies_to==target.content().profile_id
+            let applicable_deadline = target.content().deadline.as_ref().filter(|deadline| {
+                deadline.applies_to == unit.id
+                    || deadline.applies_to == target.content().scope_id
+                    || deadline.applies_to == target.content().profile_id
             });
-            if applicable_deadline.is_some_and(|d| d.due_at_unix_secs<=pinned.evaluated_at_unix_secs) {
-                push(&unit.id,BlockerCode::DeadlinePassed,BlockerEvidenceState::Claimed,
+            if applicable_deadline
+                .is_some_and(|d| d.due_at_unix_secs <= pinned.evaluated_at_unix_secs)
+            {
+                push(
+                    &unit.id,
+                    BlockerCode::DeadlinePassed,
+                    BlockerEvidenceState::Claimed,
                     BlockerSeverity::RiskReview,
-                    vec![target_reference(target)],RemediationGate::ReviewDeadline);
+                    vec![target_reference(target)],
+                    RemediationGate::ReviewDeadline,
+                );
             }
-            let report_set=compat_by_unit.get(&unit.id);
+            let report_set = compat_by_unit.get(&unit.id);
             if contradictory_units.contains(&unit.id) {
-                push(&unit.id,BlockerCode::PeerProofUnverified,BlockerEvidenceState::Contradicted,
-                    BlockerSeverity::Verification,vec![],RemediationGate::VerifyEvidence);
+                push(
+                    &unit.id,
+                    BlockerCode::PeerProofUnverified,
+                    BlockerEvidenceState::Contradicted,
+                    BlockerSeverity::Verification,
+                    vec![],
+                    RemediationGate::VerifyEvidence,
+                );
             }
-            if let Some(reports)=report_set {
+            if let Some(reports) = report_set {
                 for analysis in reports {
-                    let references=analysis.evidence_refs().iter().map(compat_reference).collect::<Vec<_>>();
-                    if analysis.status()!=CompatibilityStatus::Compatible {
-                        push(&unit.id,BlockerCode::PeerProofUnverified,
-                            BlockerEvidenceState::Unknown,BlockerSeverity::Verification,
-                            references,RemediationGate::AuthenticatePeer);
+                    let references = analysis
+                        .evidence_refs()
+                        .iter()
+                        .map(compat_reference)
+                        .collect::<Vec<_>>();
+                    if analysis.status() != CompatibilityStatus::Compatible {
+                        push(
+                            &unit.id,
+                            BlockerCode::PeerProofUnverified,
+                            BlockerEvidenceState::Unknown,
+                            BlockerSeverity::Verification,
+                            references,
+                            RemediationGate::AuthenticatePeer,
+                        );
                     }
                     for item in analysis.findings() {
-                        let (state,severity,gate)=classify_compat(item.code);
-                        let evidence=item.evidence_refs.iter().map(compat_reference).collect();
-                        push(&unit.id,BlockerCode::Compatibility(item.code),state,severity,evidence,gate);
+                        let (state, severity, gate) = classify_compat(item.code);
+                        let evidence = item.evidence_refs.iter().map(compat_reference).collect();
+                        push(
+                            &unit.id,
+                            BlockerCode::Compatibility(item.code),
+                            state,
+                            severity,
+                            evidence,
+                            gate,
+                        );
                     }
                     for prerequisite in analysis.prerequisites() {
-                        push(&unit.id,BlockerCode::CompatibilityGate(*prerequisite),
-                            BlockerEvidenceState::Unknown,BlockerSeverity::Verification,vec![],
-                            gate_for_compat(*prerequisite));
+                        push(
+                            &unit.id,
+                            BlockerCode::CompatibilityGate(*prerequisite),
+                            BlockerEvidenceState::Unknown,
+                            BlockerSeverity::Verification,
+                            vec![],
+                            gate_for_compat(*prerequisite),
+                        );
                     }
                 }
             }
         }
         for arc in topology.prerequisites() {
-            let source=arc.evidence_ids.iter().map(|id|inventory_evidence(id,&sources))
-                .collect::<Result<Vec<_>,_>>()?;
-            push(&arc.dependent_unit,BlockerCode::DependencyGate,
-                BlockerEvidenceState::Unknown,BlockerSeverity::Verification,
-                source,RemediationGate::ValidatePrerequisite);
+            let source = arc
+                .evidence_ids
+                .iter()
+                .map(|id| inventory_evidence(id, &sources))
+                .collect::<Result<Vec<_>, _>>()?;
+            push(
+                &arc.dependent_unit,
+                BlockerCode::DependencyGate,
+                BlockerEvidenceState::Unknown,
+                BlockerSeverity::Verification,
+                source,
+                RemediationGate::ValidatePrerequisite,
+            );
             if !compat_by_unit.contains_key(&arc.dependent_unit)
                 || !compat_by_unit.contains_key(&arc.prerequisite_unit)
             {
-                push(&arc.dependent_unit,BlockerCode::PeerCompatibilityMissing,
-                    BlockerEvidenceState::Unknown,BlockerSeverity::Verification,vec![],
-                    RemediationGate::AuthenticatePeer);
+                push(
+                    &arc.dependent_unit,
+                    BlockerCode::PeerCompatibilityMissing,
+                    BlockerEvidenceState::Unknown,
+                    BlockerSeverity::Verification,
+                    vec![],
+                    RemediationGate::AuthenticatePeer,
+                );
             }
         }
 
         limits.check(ResourceKind::Diagnostics, pending.len())?;
-        let number_of_actions=limits.checked_add(ResourceKind::PlanActions,pending.len(),topology.units().len())?;
-        limits.check(ResourceKind::PlanActions,number_of_actions)?;
-        let mut blockers=Vec::with_capacity(pending.len());
-        let mut actions=Vec::with_capacity(number_of_actions);
-        let mut own_action_ids=BTreeMap::<String,Vec<String>>::new();
-        for ((unit_id,code),(state,severity,sources,gates)) in pending {
-            let evidence:Vec<_>=sources.into_iter().collect();
-            let gates:Vec<_>=gates.into_iter().collect();
-            let mut id_data=Encoder::new(limits);
+        let number_of_actions = limits.checked_add(
+            ResourceKind::PlanActions,
+            pending.len(),
+            topology.units().len(),
+        )?;
+        limits.check(ResourceKind::PlanActions, number_of_actions)?;
+        let mut blockers = Vec::with_capacity(pending.len());
+        let mut actions = Vec::with_capacity(number_of_actions);
+        let mut own_action_ids = BTreeMap::<String, Vec<String>>::new();
+        for ((unit_id, code), (state, severity, sources, gates)) in pending {
+            let evidence: Vec<_> = sources.into_iter().collect();
+            let gates: Vec<_> = gates.into_iter().collect();
+            let mut id_data = Encoder::new(limits);
             id_data.raw(b"CSHIFT_BLOCKER_D1_V1")?;
             id_data.bindings(pinned)?;
             id_data.string(&unit_id)?;
             id_data.code(code)?;
             id_data.evidences(&evidence)?;
-            let blocker_id=format!("blocker-{}", SnapshotDigest::hash(&id_data.finish()).as_identifier().trim_start_matches("sha256:"));
-            let owner=owner_by_unit.get(&unit_id).cloned().ok_or_else(||problem(
-                DiagnosticCode::InvalidReference,"remediation_action_owner","unknown owner unit"))?;
-            let mut action_id_data=Encoder::new(limits);
+            let blocker_id = format!(
+                "blocker-{}",
+                SnapshotDigest::hash(&id_data.finish())
+                    .as_identifier()
+                    .trim_start_matches("sha256:")
+            );
+            let owner = owner_by_unit.get(&unit_id).cloned().ok_or_else(|| {
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_action_owner",
+                    "unknown owner unit",
+                )
+            })?;
+            let mut action_id_data = Encoder::new(limits);
             action_id_data.raw(b"CSHIFT_ACTION_D1_V1")?;
             action_id_data.string(&blocker_id)?;
-            let action_id=format!("action-{}",SnapshotDigest::hash(&action_id_data.finish()).as_identifier().trim_start_matches("sha256:"));
-            let action_kind=kind_for_blocker(code);
-            own_action_ids.entry(unit_id.clone()).or_default().push(action_id.clone());
+            let action_id = format!(
+                "action-{}",
+                SnapshotDigest::hash(&action_id_data.finish())
+                    .as_identifier()
+                    .trim_start_matches("sha256:")
+            );
+            let action_kind = kind_for_blocker(code);
+            own_action_ids
+                .entry(unit_id.clone())
+                .or_default()
+                .push(action_id.clone());
             actions.push(RemediationAction {
-                id:action_id,unit_id:unit_id.clone(),kind:action_kind,
-                resolves_blocker_ids:vec![blocker_id.clone()],
-                prerequisite_action_ids:vec![],owner:owner.clone(),
-                validation_gates:gates.clone(),
-                rollback:RollbackRequirement::EvidenceOnly,
-                change_approval_required:matches!(action_kind,RemediationActionKind::ReviewPolicy),
-                evidence:evidence.clone(),
-                due_at_unix_secs:deadline_for(target,&unit_id),
+                id: action_id,
+                unit_id: unit_id.clone(),
+                kind: action_kind,
+                resolves_blocker_ids: vec![blocker_id.clone()],
+                prerequisite_action_ids: vec![],
+                owner: owner.clone(),
+                validation_gates: gates.clone(),
+                rollback: RollbackRequirement::EvidenceOnly,
+                change_approval_required: matches!(
+                    action_kind,
+                    RemediationActionKind::ReviewPolicy
+                ),
+                evidence: evidence.clone(),
+                due_at_unix_secs: deadline_for(target, &unit_id),
             });
-            blockers.push(BlockerFinding{
-                id:blocker_id,unit_id,code,evidence_state:state,severity,evidence,
-                required_gates:gates,owner
+            blockers.push(BlockerFinding {
+                id: blocker_id,
+                unit_id,
+                code,
+                evidence_state: state,
+                severity,
+                evidence,
+                required_gates: gates,
+                owner,
             });
         }
-        let mut unit_gate_ids=BTreeMap::new();
+        let mut unit_gate_ids = BTreeMap::new();
         for unit in topology.units() {
-            let mut enc=Encoder::new(limits);
+            let mut enc = Encoder::new(limits);
             enc.raw(b"CSHIFT_UNIT_REVIEW_D1_V1")?;
             enc.bindings(pinned)?;
             enc.string(&unit.id)?;
-            unit_gate_ids.insert(unit.id.clone(),
-                format!("action-{}",SnapshotDigest::hash(&enc.finish()).as_identifier().trim_start_matches("sha256:")));
+            unit_gate_ids.insert(
+                unit.id.clone(),
+                format!(
+                    "action-{}",
+                    SnapshotDigest::hash(&enc.finish())
+                        .as_identifier()
+                        .trim_start_matches("sha256:")
+                ),
+            );
         }
         for unit in topology.units() {
-            let mut before=own_action_ids.remove(&unit.id).unwrap_or_default();
-            for arc in topology.prerequisites().iter().filter(|arc|arc.dependent_unit==unit.id) {
-                let upstream=unit_gate_ids.get(&arc.prerequisite_unit).ok_or_else(||problem(
-                    DiagnosticCode::InvalidReference,"remediation_dependency",
-                    "dependency action is not an existing SCC unit gate"))?;
+            let mut before = own_action_ids.remove(&unit.id).unwrap_or_default();
+            for arc in topology
+                .prerequisites()
+                .iter()
+                .filter(|arc| arc.dependent_unit == unit.id)
+            {
+                let upstream = unit_gate_ids.get(&arc.prerequisite_unit).ok_or_else(|| {
+                    problem(
+                        DiagnosticCode::InvalidReference,
+                        "remediation_dependency",
+                        "dependency action is not an existing SCC unit gate",
+                    )
+                })?;
                 before.push(upstream.clone());
             }
             before.sort();
             before.dedup();
-            limits.check(ResourceKind::PlannerCandidates,before.len())?;
-            let owner=owner_by_unit.get(&unit.id).cloned().ok_or_else(||problem(
-                DiagnosticCode::InvalidReference,"remediation_unit_owner","SCC owner not found"))?;
-            actions.push(RemediationAction{
-                id:unit_gate_ids.get(&unit.id).cloned().ok_or_else(||problem(
-                    DiagnosticCode::InvalidReference,"remediation_unit_gate","unit gate missing"))?,
-                unit_id:unit.id.clone(),kind:RemediationActionKind::ReviewUnitGate,
-                resolves_blocker_ids:vec![],prerequisite_action_ids:before,
-                owner,validation_gates:vec![RemediationGate::ReviewUnitReadiness],
-                rollback:RollbackRequirement::ReviewedPlanRequired,
-                change_approval_required:true,evidence:vec![],
-                due_at_unix_secs:deadline_for(target,&unit.id),
+            limits.check(ResourceKind::PlannerCandidates, before.len())?;
+            let owner = owner_by_unit.get(&unit.id).cloned().ok_or_else(|| {
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_unit_owner",
+                    "SCC owner not found",
+                )
+            })?;
+            actions.push(RemediationAction {
+                id: unit_gate_ids.get(&unit.id).cloned().ok_or_else(|| {
+                    problem(
+                        DiagnosticCode::InvalidReference,
+                        "remediation_unit_gate",
+                        "unit gate missing",
+                    )
+                })?,
+                unit_id: unit.id.clone(),
+                kind: RemediationActionKind::ReviewUnitGate,
+                resolves_blocker_ids: vec![],
+                prerequisite_action_ids: before,
+                owner,
+                validation_gates: vec![RemediationGate::ReviewUnitReadiness],
+                rollback: RollbackRequirement::ReviewedPlanRequired,
+                change_approval_required: true,
+                evidence: vec![],
+                due_at_unix_secs: deadline_for(target, &unit.id),
             });
         }
-        actions.sort_by(|a,b|(&a.unit_id,&a.id).cmp(&(&b.unit_id,&b.id)));
-        blockers.sort_by(|a,b|(&a.unit_id,&a.code,&a.id).cmp(&(&b.unit_id,&b.code,&b.id)));
+        actions.sort_by(|a, b| (&a.unit_id, &a.id).cmp(&(&b.unit_id, &b.id)));
+        blockers.sort_by(|a, b| (&a.unit_id, &a.code, &a.id).cmp(&(&b.unit_id, &b.code, &b.id)));
         // Enforce all action prerequisite references and the absence of cycles.
-        verify_action_dag(&actions,limits)?;
-        let mut writer=Encoder::new(limits);
+        verify_action_dag(&actions, limits)?;
+        let mut writer = Encoder::new(limits);
         writer.raw(b"CSHIFT_REMEDIATION_REPORT_V1")?;
         writer.u16(REMEDIATION_ANALYSIS_VERSION)?;
         writer.bindings(pinned)?;
-        let mut digests:Vec<_>=compatibilities.iter().map(|v|v.digest().as_bytes()).collect();
+        let mut digests: Vec<_> = compatibilities
+            .iter()
+            .map(|v| v.digest().as_bytes())
+            .collect();
         digests.sort();
         writer.count(digests.len())?;
-        for digest in digests {writer.raw(&digest)?;}
+        for digest in digests {
+            writer.raw(&digest)?;
+        }
         writer.count(blockers.len())?;
-        for blocker in &blockers {writer.blocker(blocker)?;}
+        for blocker in &blockers {
+            writer.blocker(blocker)?;
+        }
         writer.count(actions.len())?;
-        for action in &actions {writer.action(action)?;}
-        let canonical=writer.finish();
-        let digest=SnapshotDigest::hash(&canonical);
-        Ok(RemediationAnalysis{bindings:pinned,blockers,actions,canonical,digest})
+        for action in &actions {
+            writer.action(action)?;
+        }
+        let canonical = writer.finish();
+        let digest = SnapshotDigest::hash(&canonical);
+        Ok(RemediationAnalysis {
+            bindings: pinned,
+            blockers,
+            actions,
+            canonical,
+            digest,
+        })
     }
 }
 
-fn problem(code:DiagnosticCode,subject:&'static str,reason:&'static str)->Diagnostic {
-    Diagnostic::new(code,subject,reason)
+fn problem(code: DiagnosticCode, subject: &'static str, reason: &'static str) -> Diagnostic {
+    Diagnostic::new(code, subject, reason)
 }
 
-fn valid_identifier(input:&str,subject:&'static str)->Result<(),Diagnostic> {
-    if input.is_empty()||input.len()>256
-        ||!input.bytes().all(|c|c.is_ascii_alphanumeric() || b"._:/-".contains(&c)) {
-        return Err(problem(DiagnosticCode::InvalidIdentifier,subject,
-            "identifier or source attribution has unsupported characters or length"));
+fn valid_identifier(input: &str, subject: &'static str) -> Result<(), Diagnostic> {
+    if input.is_empty()
+        || input.len() > 256
+        || !input
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || b"._:/-".contains(&c))
+    {
+        return Err(problem(
+            DiagnosticCode::InvalidIdentifier,
+            subject,
+            "identifier or source attribution has unsupported characters or length",
+        ));
     }
     Ok(())
 }
 
 fn inventory_evidence(
-    id:&str, sources:&BTreeMap<&str,&crate::EvidenceRecord>
-)->Result<RemediationEvidence,Diagnostic> {
-    let item=sources.get(id).ok_or_else(||problem(DiagnosticCode::InvalidReference,
-        "remediation_evidence","referenced evidence must exist in the exact inventory"))?;
+    id: &str,
+    sources: &BTreeMap<&str, &crate::EvidenceRecord>,
+) -> Result<RemediationEvidence, Diagnostic> {
+    let item = sources.get(id).ok_or_else(|| {
+        problem(
+            DiagnosticCode::InvalidReference,
+            "remediation_evidence",
+            "referenced evidence must exist in the exact inventory",
+        )
+    })?;
     Ok(RemediationEvidence::Inventory {
-        source_id:item.source_id.clone(),run_id:item.run_id.clone(),evidence_id:item.id.clone()
+        source_id: item.source_id.clone(),
+        run_id: item.run_id.clone(),
+        evidence_id: item.id.clone(),
     })
 }
 
-fn compat_reference(value:&CapabilityEvidenceRef)->RemediationEvidence {
+fn compat_reference(value: &CapabilityEvidenceRef) -> RemediationEvidence {
     RemediationEvidence::Compatibility {
-        source_id:value.source_id.clone(),evidence_id:value.evidence_id.clone(),
-        source_revision:value.source_revision.clone(),
+        source_id: value.source_id.clone(),
+        evidence_id: value.evidence_id.clone(),
+        source_revision: value.source_revision.clone(),
     }
 }
 
-fn target_reference(target:&TargetProfile)->RemediationEvidence {
-    let source=&target.content().provenance;
-    RemediationEvidence::TargetDocument{
-        issuer_id:source.issuer_id.clone(),document_id:source.document_id.clone(),
-        source_revision:source.revision.clone(),
+fn target_reference(target: &TargetProfile) -> RemediationEvidence {
+    let source = &target.content().provenance;
+    RemediationEvidence::TargetDocument {
+        issuer_id: source.issuer_id.clone(),
+        document_id: source.document_id.clone(),
+        source_revision: source.revision.clone(),
     }
 }
 
-fn deadline_for(target:&TargetProfile,unit:&str)->Option<i64> {
-    target.content().deadline.as_ref()
-        .filter(|deadline|deadline.applies_to==unit ||
-            deadline.applies_to==target.content().scope_id ||
-            deadline.applies_to==target.content().profile_id)
-        .map(|deadline|deadline.due_at_unix_secs)
+fn deadline_for(target: &TargetProfile, unit: &str) -> Option<i64> {
+    target
+        .content()
+        .deadline
+        .as_ref()
+        .filter(|deadline| {
+            deadline.applies_to == unit
+                || deadline.applies_to == target.content().scope_id
+                || deadline.applies_to == target.content().profile_id
+        })
+        .map(|deadline| deadline.due_at_unix_secs)
 }
 
-fn classify_compat(code:CompatibilityCode)
-->(BlockerEvidenceState,BlockerSeverity,RemediationGate) {
+fn classify_compat(
+    code: CompatibilityCode,
+) -> (BlockerEvidenceState, BlockerSeverity, RemediationGate) {
     use CompatibilityCode as C;
     match code {
-        C::AlgorithmForbidden|C::ProtocolNotApproved|C::CertificateNotApproved|
-        C::HybridNotApproved|C::DowngradeRejected => (
-            BlockerEvidenceState::Prohibited,BlockerSeverity::HardPolicy,
-            RemediationGate::ApprovePolicyAlternative),
-        C::NegotiationMismatch|C::PkiMismatch|C::EvidenceConflict|
-        C::CapabilityConflict => (
-            BlockerEvidenceState::Contradicted,BlockerSeverity::Verification,
-            RemediationGate::VerifyEvidence),
-        C::PkiMissing|C::PkiUnverified => (
-            BlockerEvidenceState::Unknown,BlockerSeverity::Verification,
-            RemediationGate::ValidatePki),
+        C::AlgorithmForbidden
+        | C::ProtocolNotApproved
+        | C::CertificateNotApproved
+        | C::HybridNotApproved
+        | C::DowngradeRejected => (
+            BlockerEvidenceState::Prohibited,
+            BlockerSeverity::HardPolicy,
+            RemediationGate::ApprovePolicyAlternative,
+        ),
+        C::NegotiationMismatch | C::PkiMismatch | C::EvidenceConflict | C::CapabilityConflict => (
+            BlockerEvidenceState::Contradicted,
+            BlockerSeverity::Verification,
+            RemediationGate::VerifyEvidence,
+        ),
+        C::PkiMissing | C::PkiUnverified => (
+            BlockerEvidenceState::Unknown,
+            BlockerSeverity::Verification,
+            RemediationGate::ValidatePki,
+        ),
         C::HybridProofMissing => (
-            BlockerEvidenceState::Unknown,BlockerSeverity::Verification,
-            RemediationGate::VerifyHybrid),
-        C::CapabilityMissing|C::CapabilityUnproven|C::CapabilityStale => (
-            BlockerEvidenceState::Unknown,BlockerSeverity::Verification,
-            RemediationGate::VerifyProvider),
-        C::EvidenceStale|C::EvidenceBindingMismatch => (
-            BlockerEvidenceState::Unknown,BlockerSeverity::Verification,
-            RemediationGate::VerifyEvidence),
+            BlockerEvidenceState::Unknown,
+            BlockerSeverity::Verification,
+            RemediationGate::VerifyHybrid,
+        ),
+        C::CapabilityMissing | C::CapabilityUnproven | C::CapabilityStale => (
+            BlockerEvidenceState::Unknown,
+            BlockerSeverity::Verification,
+            RemediationGate::VerifyProvider,
+        ),
+        C::EvidenceStale | C::EvidenceBindingMismatch => (
+            BlockerEvidenceState::Unknown,
+            BlockerSeverity::Verification,
+            RemediationGate::VerifyEvidence,
+        ),
         C::TargetNotSpecified => (
-            BlockerEvidenceState::Unknown,BlockerSeverity::HardPolicy,
-            RemediationGate::ApprovePolicyAlternative),
-        C::PeerLinkMissing|C::NegotiationMissing|C::NegotiationUnauthenticated => (
-            BlockerEvidenceState::Unknown,BlockerSeverity::Verification,
-            RemediationGate::AuthenticatePeer),
+            BlockerEvidenceState::Unknown,
+            BlockerSeverity::HardPolicy,
+            RemediationGate::ApprovePolicyAlternative,
+        ),
+        C::PeerLinkMissing | C::NegotiationMissing | C::NegotiationUnauthenticated => (
+            BlockerEvidenceState::Unknown,
+            BlockerSeverity::Verification,
+            RemediationGate::AuthenticatePeer,
+        ),
     }
 }
 
-fn gate_for_compat(value:CompatibilityPrerequisite)->RemediationGate {
+fn gate_for_compat(value: CompatibilityPrerequisite) -> RemediationGate {
     use CompatibilityPrerequisite as P;
     match value {
-        P::VerifyPeerLink|P::VerifyNegotiation=>RemediationGate::AuthenticatePeer,
-        P::VerifyInitiator|P::VerifyResponder=>RemediationGate::VerifyProvider,
-        P::VerifyPki|P::VerifyRevocation=>RemediationGate::ValidatePki,
-        P::VerifyHybrid=>RemediationGate::VerifyHybrid,
-        P::ChangeTarget=>RemediationGate::ApprovePolicyAlternative,
-        P::ReconcileEvidence=>RemediationGate::VerifyEvidence,
+        P::VerifyPeerLink | P::VerifyNegotiation => RemediationGate::AuthenticatePeer,
+        P::VerifyInitiator | P::VerifyResponder => RemediationGate::VerifyProvider,
+        P::VerifyPki | P::VerifyRevocation => RemediationGate::ValidatePki,
+        P::VerifyHybrid => RemediationGate::VerifyHybrid,
+        P::ChangeTarget => RemediationGate::ApprovePolicyAlternative,
+        P::ReconcileEvidence => RemediationGate::VerifyEvidence,
     }
 }
 
-fn kind_for_blocker(code:BlockerCode)->RemediationActionKind {
+fn kind_for_blocker(code: BlockerCode) -> RemediationActionKind {
     match code {
-        BlockerCode::OwnerMissing|BlockerCode::OwnerAmbiguous=>RemediationActionKind::ResolveOwner,
-        BlockerCode::RiskUnresolved(_)|BlockerCode::RiskElevated(_)=>RemediationActionKind::AssessRisk,
-        BlockerCode::DeadlinePassed=>RemediationActionKind::ReviewDeadline,
-        BlockerCode::DependencyGate=>RemediationActionKind::ValidateDependency,
-        BlockerCode::PeerProofUnverified|BlockerCode::PeerCompatibilityMissing=>RemediationActionKind::VerifyPeer,
-        BlockerCode::CompatibilityGate(value)=>kind_for_gate(gate_for_compat(value)),
-        BlockerCode::Compatibility(value)=>kind_for_gate(classify_compat(value).2),
+        BlockerCode::OwnerMissing | BlockerCode::OwnerAmbiguous => {
+            RemediationActionKind::ResolveOwner
+        }
+        BlockerCode::RiskUnresolved(_) | BlockerCode::RiskElevated(_) => {
+            RemediationActionKind::AssessRisk
+        }
+        BlockerCode::DeadlinePassed => RemediationActionKind::ReviewDeadline,
+        BlockerCode::DependencyGate => RemediationActionKind::ValidateDependency,
+        BlockerCode::PeerProofUnverified | BlockerCode::PeerCompatibilityMissing => {
+            RemediationActionKind::VerifyPeer
+        }
+        BlockerCode::CompatibilityGate(value) => kind_for_gate(gate_for_compat(value)),
+        BlockerCode::Compatibility(value) => kind_for_gate(classify_compat(value).2),
     }
 }
 
-fn kind_for_gate(gate:RemediationGate)->RemediationActionKind {
+fn kind_for_gate(gate: RemediationGate) -> RemediationActionKind {
     match gate {
-        RemediationGate::AssignOwner=>RemediationActionKind::ResolveOwner,
-        RemediationGate::VerifyEvidence=>RemediationActionKind::ReconcileEvidence,
-        RemediationGate::AuthenticatePeer=>RemediationActionKind::VerifyPeer,
-        RemediationGate::ValidatePki=>RemediationActionKind::VerifyPki,
-        RemediationGate::ApprovePolicyAlternative=>RemediationActionKind::ReviewPolicy,
-        RemediationGate::VerifyProvider=>RemediationActionKind::VerifyProvider,
-        RemediationGate::VerifyHybrid=>RemediationActionKind::VerifyHybrid,
-        RemediationGate::ValidatePrerequisite=>RemediationActionKind::ValidateDependency,
-        RemediationGate::ReviewRisk=>RemediationActionKind::AssessRisk,
-        RemediationGate::ReviewDeadline=>RemediationActionKind::ReviewDeadline,
-        RemediationGate::ReviewUnitReadiness=>RemediationActionKind::ReviewUnitGate,
+        RemediationGate::AssignOwner => RemediationActionKind::ResolveOwner,
+        RemediationGate::VerifyEvidence => RemediationActionKind::ReconcileEvidence,
+        RemediationGate::AuthenticatePeer => RemediationActionKind::VerifyPeer,
+        RemediationGate::ValidatePki => RemediationActionKind::VerifyPki,
+        RemediationGate::ApprovePolicyAlternative => RemediationActionKind::ReviewPolicy,
+        RemediationGate::VerifyProvider => RemediationActionKind::VerifyProvider,
+        RemediationGate::VerifyHybrid => RemediationActionKind::VerifyHybrid,
+        RemediationGate::ValidatePrerequisite => RemediationActionKind::ValidateDependency,
+        RemediationGate::ReviewRisk => RemediationActionKind::AssessRisk,
+        RemediationGate::ReviewDeadline => RemediationActionKind::ReviewDeadline,
+        RemediationGate::ReviewUnitReadiness => RemediationActionKind::ReviewUnitGate,
     }
 }
 
-fn verify_action_dag(actions:&[RemediationAction],limits:&Limits)->Result<(),Diagnostic> {
-    limits.check(ResourceKind::PlanActions,actions.len())?;
-    let ids:BTreeSet<_>=actions.iter().map(|item|item.id.as_str()).collect();
-    if ids.len()!=actions.len() {
-        return Err(problem(DiagnosticCode::DuplicateRecord,"remediation_action",
-            "generated action identity collision"));
+fn verify_action_dag(actions: &[RemediationAction], limits: &Limits) -> Result<(), Diagnostic> {
+    limits.check(ResourceKind::PlanActions, actions.len())?;
+    let ids: BTreeSet<_> = actions.iter().map(|item| item.id.as_str()).collect();
+    if ids.len() != actions.len() {
+        return Err(problem(
+            DiagnosticCode::DuplicateRecord,
+            "remediation_action",
+            "generated action identity collision",
+        ));
     }
-    let mut incoming=BTreeMap::<&str,usize>::new();
-    let mut fanout=BTreeMap::<&str,Vec<&str>>::new();
-    let mut edge_count=0usize;
+    let mut incoming = BTreeMap::<&str, usize>::new();
+    let mut fanout = BTreeMap::<&str, Vec<&str>>::new();
+    let mut edge_count = 0usize;
     for item in actions {
-        incoming.insert(item.id.as_str(),item.prerequisite_action_ids.len());
-        edge_count=limits.checked_add(ResourceKind::PlannerCandidates,edge_count,item.prerequisite_action_ids.len())?;
+        incoming.insert(item.id.as_str(), item.prerequisite_action_ids.len());
+        edge_count = limits.checked_add(
+            ResourceKind::PlannerCandidates,
+            edge_count,
+            item.prerequisite_action_ids.len(),
+        )?;
         for prereq in &item.prerequisite_action_ids {
-            if prereq==&item.id || !ids.contains(prereq.as_str()) {
-                return Err(problem(DiagnosticCode::InvalidReference,"remediation_action_dependency",
-                    "action prerequisite must be a different existing action"));
+            if prereq == &item.id || !ids.contains(prereq.as_str()) {
+                return Err(problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_action_dependency",
+                    "action prerequisite must be a different existing action",
+                ));
             }
             fanout.entry(prereq).or_default().push(&item.id);
         }
     }
-    let mut ready:BTreeSet<&str>=incoming.iter().filter_map(|(id,n)|(*n==0).then_some(*id)).collect();
-    let mut visited=0usize;
-    while let Some(first)=ready.iter().next().copied() {
+    let mut ready: BTreeSet<&str> = incoming
+        .iter()
+        .filter_map(|(id, n)| (*n == 0).then_some(*id))
+        .collect();
+    let mut visited = 0usize;
+    while let Some(first) = ready.iter().next().copied() {
         ready.remove(first);
-        visited+=1;
-        for dependent in fanout.get(first).into_iter().flat_map(|v|v.iter()) {
-            let degree=incoming.get_mut(dependent.as_str()).ok_or_else(||problem(
-                DiagnosticCode::InvalidReference,"remediation_action_dependency",
-                "dependent action disappeared"))?;
-            *degree=degree.checked_sub(1).ok_or_else(||problem(DiagnosticCode::ArithmeticOverflow,
-                "remediation_action_dependency","dependency count underflow"))?;
-            if *degree==0 {ready.insert(dependent);}
+        visited += 1;
+        for dependent in fanout.get(first).into_iter().flat_map(|v| v.iter()) {
+            let degree = incoming.get_mut(dependent.as_str()).ok_or_else(|| {
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_action_dependency",
+                    "dependent action disappeared",
+                )
+            })?;
+            *degree = degree.checked_sub(1).ok_or_else(|| {
+                problem(
+                    DiagnosticCode::ArithmeticOverflow,
+                    "remediation_action_dependency",
+                    "dependency count underflow",
+                )
+            })?;
+            if *degree == 0 {
+                ready.insert(dependent);
+            }
         }
     }
-    if visited!=actions.len() {
-        return Err(problem(DiagnosticCode::InvalidStateTransition,"remediation_action_cycle",
-            "action dependency graph cannot be cyclic"));
+    if visited != actions.len() {
+        return Err(problem(
+            DiagnosticCode::InvalidStateTransition,
+            "remediation_action_cycle",
+            "action dependency graph cannot be cyclic",
+        ));
     }
     Ok(())
 }
 
 /// Bounded report assembler; checks each byte range *before* allocation.
 struct Encoder<'a> {
-    bytes:Vec<u8>,
-    limits:&'a Limits,
+    bytes: Vec<u8>,
+    limits: &'a Limits,
 }
 impl<'a> Encoder<'a> {
-    fn new(limits:&'a Limits)->Self {Self{bytes:Vec::new(),limits}}
-    fn raw(&mut self,data:&[u8])->Result<(),Diagnostic> {
-        let next=self.limits.checked_add(ResourceKind::ExportBytes,self.bytes.len(),data.len())?;
-        self.limits.check(ResourceKind::ExportBytes,next)?;
+    fn new(limits: &'a Limits) -> Self {
+        Self {
+            bytes: Vec::new(),
+            limits,
+        }
+    }
+    fn raw(&mut self, data: &[u8]) -> Result<(), Diagnostic> {
+        let next =
+            self.limits
+                .checked_add(ResourceKind::ExportBytes, self.bytes.len(), data.len())?;
+        self.limits.check(ResourceKind::ExportBytes, next)?;
         self.bytes.extend_from_slice(data);
         Ok(())
     }
-    fn flag(&mut self, flag:bool)->Result<(),Diagnostic>{self.raw(&[u8::from(flag)])}
-    fn u16(&mut self, value:u16)->Result<(),Diagnostic>{self.raw(&value.to_be_bytes())}
-    fn u32(&mut self, value:u32)->Result<(),Diagnostic>{self.raw(&value.to_be_bytes())}
-    fn i64(&mut self, value:i64)->Result<(),Diagnostic>{self.raw(&value.to_be_bytes())}
-    fn count(&mut self,len:usize)->Result<(),Diagnostic>{
-        let n=u32::try_from(len).map_err(|_|problem(DiagnosticCode::ArithmeticOverflow,
-            "remediation_export_count","collection exceeds serialized count range"))?;
+    fn flag(&mut self, flag: bool) -> Result<(), Diagnostic> {
+        self.raw(&[u8::from(flag)])
+    }
+    fn u16(&mut self, value: u16) -> Result<(), Diagnostic> {
+        self.raw(&value.to_be_bytes())
+    }
+    fn u32(&mut self, value: u32) -> Result<(), Diagnostic> {
+        self.raw(&value.to_be_bytes())
+    }
+    fn i64(&mut self, value: i64) -> Result<(), Diagnostic> {
+        self.raw(&value.to_be_bytes())
+    }
+    fn count(&mut self, len: usize) -> Result<(), Diagnostic> {
+        let n = u32::try_from(len).map_err(|_| {
+            problem(
+                DiagnosticCode::ArithmeticOverflow,
+                "remediation_export_count",
+                "collection exceeds serialized count range",
+            )
+        })?;
         self.u32(n)
     }
-    fn digest(&mut self,digest:SnapshotDigest)->Result<(),Diagnostic>{self.raw(&digest.as_bytes())}
-    fn string(&mut self,value:&str)->Result<(),Diagnostic>{
+    fn digest(&mut self, digest: SnapshotDigest) -> Result<(), Diagnostic> {
+        self.raw(&digest.as_bytes())
+    }
+    fn string(&mut self, value: &str) -> Result<(), Diagnostic> {
         self.count(value.len())?;
         self.raw(value.as_bytes())
     }
-    fn strings(&mut self,items:&[String])->Result<(),Diagnostic>{
+    fn strings(&mut self, items: &[String]) -> Result<(), Diagnostic> {
         self.count(items.len())?;
-        for item in items {self.string(item)?;}
+        for item in items {
+            self.string(item)?;
+        }
         Ok(())
     }
-    fn bindings(&mut self,b:RemediationBindings)->Result<(),Diagnostic>{
-        for digest in [b.inventory_digest,b.graph_digest,b.topology_digest,b.risk_digest,b.target_digest] {
+    fn bindings(&mut self, b: RemediationBindings) -> Result<(), Diagnostic> {
+        for digest in [
+            b.inventory_digest,
+            b.graph_digest,
+            b.topology_digest,
+            b.risk_digest,
+            b.target_digest,
+        ] {
             self.digest(digest)?;
         }
         self.i64(b.evaluated_at_unix_secs)
     }
-    fn evidence(&mut self,value:&RemediationEvidence)->Result<(),Diagnostic>{
+    fn evidence(&mut self, value: &RemediationEvidence) -> Result<(), Diagnostic> {
         match value {
-            RemediationEvidence::Inventory{source_id,run_id,evidence_id}=>{
+            RemediationEvidence::Inventory {
+                source_id,
+                run_id,
+                evidence_id,
+            } => {
                 self.raw(&[1])?;
-                for part in [source_id,run_id,evidence_id] {self.string(part)?;}
-            },
-            RemediationEvidence::Compatibility{source_id,evidence_id,source_revision}=>{
+                for part in [source_id, run_id, evidence_id] {
+                    self.string(part)?;
+                }
+            }
+            RemediationEvidence::Compatibility {
+                source_id,
+                evidence_id,
+                source_revision,
+            } => {
                 self.raw(&[2])?;
-                for part in [source_id,evidence_id,source_revision] {self.string(part)?;}
-            },
-            RemediationEvidence::RiskAssessment{reference_id}=>{
-                self.raw(&[3])?;self.string(reference_id)?;
-            },
-            RemediationEvidence::TargetDocument{issuer_id,document_id,source_revision}=>{
+                for part in [source_id, evidence_id, source_revision] {
+                    self.string(part)?;
+                }
+            }
+            RemediationEvidence::RiskAssessment { reference_id } => {
+                self.raw(&[3])?;
+                self.string(reference_id)?;
+            }
+            RemediationEvidence::TargetDocument {
+                issuer_id,
+                document_id,
+                source_revision,
+            } => {
                 self.raw(&[4])?;
-                for part in [issuer_id,document_id,source_revision] {self.string(part)?;}
-            },
+                for part in [issuer_id, document_id, source_revision] {
+                    self.string(part)?;
+                }
+            }
         }
         Ok(())
     }
-    fn evidences(&mut self,items:&[RemediationEvidence])->Result<(),Diagnostic>{
+    fn evidences(&mut self, items: &[RemediationEvidence]) -> Result<(), Diagnostic> {
         self.count(items.len())?;
-        for item in items {self.evidence(item)?;}
+        for item in items {
+            self.evidence(item)?;
+        }
         Ok(())
     }
-    fn code(&mut self,code:BlockerCode)->Result<(),Diagnostic>{
+    fn code(&mut self, code: BlockerCode) -> Result<(), Diagnostic> {
         match code {
-            BlockerCode::OwnerMissing=>self.raw(&[1]),
-            BlockerCode::OwnerAmbiguous=>self.raw(&[2]),
-            BlockerCode::RiskUnresolved(kind)=>self.raw(&[3,kind as u8]),
-            BlockerCode::RiskElevated(kind)=>self.raw(&[4,kind as u8]),
-            BlockerCode::PeerProofUnverified=>self.raw(&[5]),
-            BlockerCode::PeerCompatibilityMissing=>self.raw(&[6]),
-            BlockerCode::Compatibility(kind)=>self.raw(&[7,kind as u8]),
-            BlockerCode::CompatibilityGate(kind)=>self.raw(&[8,kind as u8]),
-            BlockerCode::DependencyGate=>self.raw(&[9]),
-            BlockerCode::DeadlinePassed=>self.raw(&[10]),
+            BlockerCode::OwnerMissing => self.raw(&[1]),
+            BlockerCode::OwnerAmbiguous => self.raw(&[2]),
+            BlockerCode::RiskUnresolved(kind) => self.raw(&[3, kind as u8]),
+            BlockerCode::RiskElevated(kind) => self.raw(&[4, kind as u8]),
+            BlockerCode::PeerProofUnverified => self.raw(&[5]),
+            BlockerCode::PeerCompatibilityMissing => self.raw(&[6]),
+            BlockerCode::Compatibility(kind) => self.raw(&[7, kind as u8]),
+            BlockerCode::CompatibilityGate(kind) => self.raw(&[8, kind as u8]),
+            BlockerCode::DependencyGate => self.raw(&[9]),
+            BlockerCode::DeadlinePassed => self.raw(&[10]),
         }
     }
-    fn owner(&mut self,value:&RemediationOwner)->Result<(),Diagnostic>{
+    fn owner(&mut self, value: &RemediationOwner) -> Result<(), Diagnostic> {
         match value {
-            RemediationOwner::Missing=>self.raw(&[1]),
-            RemediationOwner::Claimed(value)=>{self.raw(&[2])?;self.string(value)},
-            RemediationOwner::Ambiguous(items)=>{self.raw(&[3])?;self.strings(items)},
+            RemediationOwner::Missing => self.raw(&[1]),
+            RemediationOwner::Claimed(value) => {
+                self.raw(&[2])?;
+                self.string(value)
+            }
+            RemediationOwner::Ambiguous(items) => {
+                self.raw(&[3])?;
+                self.strings(items)
+            }
         }
     }
-    fn gates(&mut self,items:&[RemediationGate])->Result<(),Diagnostic>{
+    fn gates(&mut self, items: &[RemediationGate]) -> Result<(), Diagnostic> {
         self.count(items.len())?;
-        for item in items {self.raw(&[*item as u8])?;}
+        for item in items {
+            self.raw(&[*item as u8])?;
+        }
         Ok(())
     }
-    fn blocker(&mut self,blocker:&BlockerFinding)->Result<(),Diagnostic>{
+    fn blocker(&mut self, blocker: &BlockerFinding) -> Result<(), Diagnostic> {
         self.string(&blocker.id)?;
         self.string(&blocker.unit_id)?;
         self.code(blocker.code)?;
-        self.raw(&[blocker.evidence_state as u8,blocker.severity as u8])?;
+        self.raw(&[blocker.evidence_state as u8, blocker.severity as u8])?;
         self.evidences(&blocker.evidence)?;
         self.gates(&blocker.required_gates)?;
         self.owner(&blocker.owner)
     }
-    fn action(&mut self,action:&RemediationAction)->Result<(),Diagnostic>{
+    fn action(&mut self, action: &RemediationAction) -> Result<(), Diagnostic> {
         self.string(&action.id)?;
         self.string(&action.unit_id)?;
         self.raw(&[action.kind as u8])?;
@@ -1012,9 +1416,14 @@ impl<'a> Encoder<'a> {
         self.raw(&[action.rollback as u8])?;
         self.flag(action.change_approval_required)?;
         self.evidences(&action.evidence)?;
-        if let Some(due)=action.due_at_unix_secs {
-            self.flag(true)?;self.i64(due)
-        } else {self.flag(false)}
+        if let Some(due) = action.due_at_unix_secs {
+            self.flag(true)?;
+            self.i64(due)
+        } else {
+            self.flag(false)
+        }
     }
-    fn finish(self)->Vec<u8>{self.bytes}
+    fn finish(self) -> Vec<u8> {
+        self.bytes
+    }
 }
