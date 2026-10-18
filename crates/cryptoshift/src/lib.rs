@@ -34,6 +34,7 @@ mod inventory;
 mod inventory_codec;
 mod limits;
 mod remediation;
+mod plan;
 mod risk_analysis;
 mod risk_model;
 mod standards;
@@ -104,4 +105,13 @@ pub use remediation::{
 pub use wave::{
     MigrationWave, ReadinessGate, ReadinessGateKind, UnitReadiness, UnitReadinessStatus,
     WAVE_PLAN_VERSION, WavePlanBindings, WavePlanDraft, WavePlanRequest, WavePlanner,
+};
+
+// Auditable, immutable plan drafts and untrusted exception record lifecycle (FOSS-444).
+pub use plan::{
+    MIGRATION_PLAN_VERSION, ClaimedExceptionApproval, MigrationPlanDraft,
+    MigrationPlanRequest, MigrationPlanner, PlanAssessmentState, PlanCatalogPin,
+    PlanChangeKind, PlanDiff, PlanEvidenceRef, PlanExceptionRecord,
+    PlanExceptionRequest, PlanExceptionState, PlanScorePin, PlanSourcePins,
+    ResidualRiskFacet, ResidualRiskKind,
 };
