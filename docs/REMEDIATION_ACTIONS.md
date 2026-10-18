@@ -12,11 +12,11 @@ Cryptoshift's Gate D1 creates **offline remediation proposals**, not migration e
 
 ## Blockers, provenance and ownership
 
-- Missing/ambiguous accountable owners are reported from actual `OwnedBy` graph edges, not selected automatically.
+- Missing/ambiguous accountable owners are reported from actual `OwnedBy` graph edges with their exact inventory source/run/evidence IDs, not selected automatically.
 - All ten risk factors remain distinct; unknown, assumed, or elevated factors require separate risk review. A score cannot override a missing or assumed factor.
 - Compatibility findings retain their typed reason and original `source_id,evidence_id,source_revision` triples. Inventory evidence retains `source_id,run_id,evidence_id`; external risk assessment references remain opaque, never assigned a fabricated publisher.
 - Unsigned handshake receipts, vendor-roadmap statuses, missing PKI/revocation proof and unapproved downgrade claims remain blocking.
-- Only an explicitly applicable target deadline is shown. No release date, effort estimate, chosen product upgrade, policy exception or new hybrid combiner is invented.
+- Only an explicitly applicable target deadline is shown, preserving the deadline's separate source reference rather than conflating it with the target-document provenance. No release date, effort estimate, chosen product upgrade, policy exception or new hybrid combiner is invented.
 - `UnitReadinessReview` is an *action to request human evaluation*, never a declaration of `Ready`. It depends on all blockers in its own SCC plus prerequisite unit gate actions. Cycles collapse to one indivisible SCC before action planning.
 - `change_approval_required`, `maintenance: ReviewedWindowRequired` and `rollback: ReviewedPlanRequired` on unit gates encode future procedural requirements, not approval itself.
 
