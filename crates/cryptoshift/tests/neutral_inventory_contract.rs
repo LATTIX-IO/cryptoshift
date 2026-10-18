@@ -570,12 +570,20 @@ fn frozen_neutral_change_v1_content_identity() {
     let before = project(false, true);
     let after = project(true, false);
     let changes = vec![
-        claim(NeutralChangeKind::ObservationModified, Some("obs-proto"), "srv"),
+        claim(
+            NeutralChangeKind::ObservationModified,
+            Some("obs-proto"),
+            "srv",
+        ),
         claim(NeutralChangeKind::TentativeAbsent, None, "legacy"),
     ];
     let frozen = NeutralChangeSet::new(
-        &before, &after, input(&before, &after, changes), &Limits::default(),
-    ).unwrap();
+        &before,
+        &after,
+        input(&before, &after, changes),
+        &Limits::default(),
+    )
+    .unwrap();
     let bytes = frozen.export(&Limits::default()).unwrap();
     assert_eq!(
         format!("{} {}", frozen.digest().as_identifier(), bytes.len()),
