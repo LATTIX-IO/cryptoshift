@@ -930,6 +930,9 @@ impl CompatibilityAnalyzer {
         if request.certificate.is_some() {
             prerequisites.insert(CompatibilityPrerequisite::VerifyPki);
             if !has_pki {
+                // An unobserved required PKI validation cannot establish a
+                // transition candidate, even if the KEM offer matched.
+                uncertainty = true;
                 add(
                     &mut findings,
                     CompatibilitySubject::Pki,
@@ -955,6 +958,9 @@ impl CompatibilityAnalyzer {
         if request.hybrid.is_some() {
             prerequisites.insert(CompatibilityPrerequisite::VerifyHybrid);
             if !selected_hybrid {
+                // A named target combiner alone is not evidence that peers
+                // negotiated that construction on the wire.
+                uncertainty = true;
                 add(
                     &mut findings,
                     CompatibilitySubject::Protocol,
