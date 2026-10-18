@@ -751,9 +751,13 @@ impl RemediationAnalyzer {
             value.3.insert(gate);
         };
         for unit in topology.units() {
-            let owner = owner_by_unit
-                .get(&unit.id)
-                .expect("owner for every topology unit");
+            let owner = owner_by_unit.get(&unit.id).ok_or_else(|| {
+                problem(
+                    DiagnosticCode::InvalidReference,
+                    "remediation_unit_owner",
+                    "an SCC unit has no associated owner assessment",
+                )
+            })?;
             match owner {
                 RemediationOwner::Missing => push(
                     &unit.id,
