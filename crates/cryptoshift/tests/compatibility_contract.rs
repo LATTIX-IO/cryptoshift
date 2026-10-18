@@ -611,6 +611,9 @@ fn report_output_and_diagnostics_are_bounded_before_commit() {
     caps.max_export_bytes = bytes.len() - 1;
     let err = CompatibilityAnalyzer::analyze(&req, &g, &t, &l, &r, TIME, &caps).unwrap_err();
     assert_eq!(err.code, DiagnosticCode::ResourceLimitExceeded);
+    // Remove the peer evidence so two distinct missing prerequisites must
+    // produce two diagnostics; one diagnostic is within a cap of one.
+    req.observations.clear();
     let mut caps = limits();
     caps.max_diagnostics = 1;
     assert_eq!(
