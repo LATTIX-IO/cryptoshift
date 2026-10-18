@@ -303,6 +303,9 @@ fn missing_owner_and_dependency_are_never_silently_cleared() {
     assert!(gate_a.prerequisite_action_ids.contains(&gate_b.id));
     assert!(!gate_b.prerequisite_action_ids.contains(&gate_a.id));
     assert!(gate_a.change_approval_required);
+    assert_eq!(gate_a.source_bindings, report.bindings());
+    assert!(report.blockers().iter().all(|b|b.source_bindings==report.bindings()));
+    assert!(report.actions().iter().all(|a|a.source_bindings==report.bindings()));
     assert_eq!(gate_a.rollback, RollbackRequirement::ReviewedPlanRequired);
     assert_eq!(gate_a.maintenance, MaintenanceRequirement::ReviewedWindowRequired);
     assert_eq!(
