@@ -352,6 +352,25 @@ impl RemediationAnalyzer {
     /// Reordered unit collections preserve identity; changed model details do not.
     pub fn risk_digest(risk: &RiskReport, limits: &Limits) -> Result<SnapshotDigest, Diagnostic> {
         limits.check(ResourceKind::GraphNodes, risk.units.len())?;
+        // The report is publicly mutable: re-admit nested reference counts
+        // before cloning/sorting source references for canonical serialization.
+        let mut attached = 0_usize;
+        for unit in &risk.units {
+            limits.check(ResourceKind::ProfileReferences, unit.factors.len())?;
+            for factor in &unit.factors {
+                attached = limits.checked_add(
+                    ResourceKind::EvidenceRecords,
+                    attached,
+                    factor.inventory_evidence_ids.len(),
+                )?;
+                attached = limits.checked_add(
+                    ResourceKind::EvidenceRecords,
+                    attached,
+                    factor.assessment_references.len(),
+                )?;
+            }
+        }
+        limits.check(ResourceKind::EvidenceRecords, attached)?;
         let mut enc = Encoder::new(limits);
         enc.raw(b"CSHIFT_RISK_INPUT_D1_V1")?;
         enc.u16(risk.model_version)?;
