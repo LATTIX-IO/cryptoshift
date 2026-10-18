@@ -994,9 +994,11 @@ fn dependency_without_protocol_evidence_does_not_invent_handshake_observations()
     assert!(has(&report, "a", BlockerCode::DependencyGate));
     assert!(!has(&report, "a", BlockerCode::PeerProofUnverified));
     assert!(!has(&report, "a", BlockerCode::PeerCompatibilityMissing));
-    assert!(!report.blockers().iter().any(|finding|
-        matches!(finding.code, BlockerCode::Compatibility(CompatibilityCode::NegotiationMissing))
-    ));
+    let inferred_handshake = BlockerCode::Compatibility(CompatibilityCode::NegotiationMissing);
+    assert!(!report
+        .blockers()
+        .iter()
+        .any(|finding| finding.code == inferred_handshake));
 }
 
 #[test]
@@ -1012,9 +1014,6 @@ fn distinct_candidates_for_same_peers_are_not_automatically_conflicting() {
         .find(|item| item.unit_id == "a" && item.code == BlockerCode::PeerProofUnverified)
         .unwrap();
     assert_eq!(unresolved.evidence_state, BlockerEvidenceState::Unknown);
-    assert!(has(
-        &report,
-        "a",
-        BlockerCode::Compatibility(CompatibilityCode::DowngradeRejected)
-    ));
+    let forbidden = BlockerCode::Compatibility(CompatibilityCode::DowngradeRejected);
+    assert!(has(&report, "a", forbidden));
 }
