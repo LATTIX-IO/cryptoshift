@@ -354,6 +354,16 @@ fn bounded_source_references_and_outputs_fail_closed() {
             .code,
         DiagnosticCode::ResourceLimitExceeded
     );
+    let input_tight = Limits {
+        max_input_bytes: len - 1,
+        ..Limits::default()
+    };
+    assert_eq!(
+        NeutralPolicyReview::new(result(&t), &t, &input_tight)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
 }
 
 #[test]
