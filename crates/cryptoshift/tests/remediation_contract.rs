@@ -1,3 +1,4 @@
+//! Security, regression, and canonical-contract acceptance for FOSS-441.
 #![allow(clippy::unwrap_used, clippy::expect_used)] // Synthetic acceptance fixtures.
 use cryptoshift::*;
 
@@ -160,9 +161,9 @@ fn bindings(f: &Fixture) -> RemediationBindings {
     .unwrap()
 }
 
-fn run<'a>(
+fn run(
     f: &Fixture,
-    reports: &[&'a CompatibilityAnalysis],
+    reports: &[&CompatibilityAnalysis],
 ) -> Result<RemediationAnalysis, Diagnostic> {
     RemediationAnalyzer::analyze(
         &f.inventory,
@@ -718,8 +719,7 @@ fn output_is_bounded_without_partial_success() {
     let f = fixture(true, false);
     let report = run(&f, &[]).unwrap();
     let bytes = report.export(&Limits::default()).unwrap();
-    let mut limits = Limits::default();
-    limits.max_plan_actions = 1;
+    let limits = Limits { max_plan_actions: 1, ..Limits::default() };
     assert_eq!(
         RemediationAnalyzer::analyze(
             &f.inventory,
@@ -735,8 +735,7 @@ fn output_is_bounded_without_partial_success() {
         .code,
         DiagnosticCode::ResourceLimitExceeded
     );
-    let mut limits = Limits::default();
-    limits.max_diagnostics = 1;
+    let limits = Limits { max_diagnostics: 1, ..Limits::default() };
     assert_eq!(
         RemediationAnalyzer::analyze(
             &f.inventory,
@@ -753,8 +752,7 @@ fn output_is_bounded_without_partial_success() {
         DiagnosticCode::ResourceLimitExceeded
     );
     assert!(bytes.len() > f.inventory.export(&Limits::default()).unwrap().bytes.len());
-    let mut limits = Limits::default();
-    limits.max_export_bytes = bytes.len() - 1;
+    let limits = Limits { max_export_bytes: bytes.len() - 1, ..Limits::default() };
     assert_eq!(
         RemediationAnalyzer::analyze(
             &f.inventory,
@@ -863,8 +861,7 @@ fn duplicate_risk_claims_and_oversized_combined_evidence_are_rejected() {
     );
     f.risk.units[0].factors[0].assessment_references.clear();
     let compat = peer_analysis(&f, false);
-    let mut caps = Limits::default();
-    caps.max_evidence_records = 1;
+    let caps = Limits { max_evidence_records: 1, ..Limits::default() };
     assert_eq!(
         RemediationAnalyzer::analyze(
             &f.inventory,
