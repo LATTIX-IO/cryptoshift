@@ -33,6 +33,7 @@ mod graph;
 mod inventory;
 mod inventory_codec;
 mod limits;
+mod remediation;
 mod risk_analysis;
 mod risk_model;
 mod standards;
@@ -88,4 +89,12 @@ pub use compatibility::{
     CompatibilityObservation, CompatibilityPrerequisite, CompatibilityRequest, CompatibilitySource,
     CompatibilityStatus, CompatibilitySubject, EndpointIdentity, HybridSelection,
     NegotiationObservation, PeerLinkObservation, PkiObservation,
+};
+
+// Advisory, digest-bound migration blocker and action planning (FOSS-441).
+pub use remediation::{
+    BlockerCode, BlockerEvidenceState, BlockerFinding, BlockerSeverity, MaintenanceRequirement,
+    REMEDIATION_ANALYSIS_VERSION, RemediationAction, RemediationActionKind, RemediationAnalysis,
+    RemediationAnalyzer, RemediationBindings, RemediationEvidence, RemediationGate,
+    RemediationOwner, RollbackRequirement,
 };

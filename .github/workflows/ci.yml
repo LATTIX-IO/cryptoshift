@@ -51,6 +51,14 @@ jobs:
           grep -Fq "status: Unknown" <<< "$output"
           grep -Fq "NegotiationMissing" <<< "$output"
           grep -Fq "No protocol negotiation was authenticated" <<< "$output"
+      - name: Standalone offline remediation acceptance
+        shell: bash
+        run: |
+          output=$(cargo run -p cryptoshift --example remediation_actions --locked)
+          printf '%s\n' "$output"
+          grep -Fq "blockers:" <<< "$output"
+          grep -Fq "proposed actions:" <<< "$output"
+          grep -Fq "No changes have been executed" <<< "$output"
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
