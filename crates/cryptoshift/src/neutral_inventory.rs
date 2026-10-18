@@ -183,6 +183,29 @@ impl NeutralInventoryAdapter {
                 ));
             }
         }
+        // A claimed negotiated protocol must cite at least one *directly*
+        // collected source observation, not only inferred/configured evidence.
+        // Even direct evidence remains an unauthenticated source claim here.
+        let direct_evidence: BTreeSet<&str> = body
+            .evidence
+            .iter()
+            .filter(|e| e.basis == crate::EvidenceBasis::Direct)
+            .map(|e| e.id.as_str())
+            .collect();
+        for observation in &body.observations {
+            if observation.kind == crate::CryptoUseKind::NegotiatedProtocol
+                && !observation
+                    .evidence_ids
+                    .iter()
+                    .any(|id| direct_evidence.contains(id.as_str()))
+            {
+                return Err(error(
+                    DiagnosticCode::InvalidStateTransition,
+                    "neutral_negotiation_evidence",
+                    "claimed wire negotiation must cite direct observation evidence",
+                ));
+            }
+        }
         let graph = EvidenceGraph::new(
             &inventory,
             input.nodes.to_vec(),
