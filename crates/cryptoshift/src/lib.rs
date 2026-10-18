@@ -112,5 +112,5 @@ pub use plan::{
     ClaimedExceptionApproval, MIGRATION_PLAN_VERSION, MigrationPlanDraft, MigrationPlanRequest,
     MigrationPlanner, PlanAssessmentState, PlanCatalogPin, PlanChangeKind, PlanDiff,
     PlanEvidenceRef, PlanExceptionRecord, PlanExceptionRequest, PlanExceptionState, PlanScorePin,
-    PlanSourcePins, ResidualRiskFacet, ResidualRiskKind,
+    PlanFacetSubject, PlanSourcePins, ResidualRiskFacet, ResidualRiskKind,
 };
