@@ -463,6 +463,55 @@ impl NeutralChangeSet {
             next.runs.iter().map(|r| (r.id.as_str(), r)).collect();
         let evidence: BTreeMap<&str, &crate::EvidenceRecord> =
             next.evidence.iter().map(|e| (e.id.as_str(), e)).collect();
+        // Index once: per-claim linear absence and asset scans otherwise form
+        // a CPU denial of service for large but otherwise valid source inputs.
+        // Status tags avoid imposing an Ord implementation on public AbsenceStatus.
+        let absences: BTreeSet<(&str, &str, u8)> = next
+            .absences
+            .iter()
+            .map(|absence| {
+                (
+                    absence.asset_id.as_str(),
+                    absence.run_id.as_str(),
+                    if absence.status == AbsenceStatus::Confirmed { 2 } else { 1 },
+                )
+            })
+            .collect();
+        let old_assets: BTreeSet<&str> = old
+            .observations
+            .iter()
+            .map(|observation| observation.asset_id.as_str())
+            .collect();
+        let next_assets: BTreeSet<&str> = next
+            .observations
+            .iter()
+            .map(|observation| observation.asset_id.as_str())
+            .collect();
+        // Fail duplicate claims before expensive provenance and transition
+        // validation; use borrowed keys so no attacker-controlled IDs are
+        // cloned merely to establish uniqueness.
+        {
+            let mut claims = BTreeSet::new();
+            for claim in &input.changes {
+                identifier(&claim.asset_id, "neutral_change_asset")?;
+                identifier(&claim.run_id, "neutral_change_run")?;
+                if let Some(id) = claim.observation_id.as_deref() {
+                    identifier(id, "neutral_change_observation")?;
+                }
+                if !claims.insert((
+                    claim.asset_id.as_str(),
+                    claim.kind,
+                    claim.observation_id.as_deref(),
+                    claim.run_id.as_str(),
+                )) {
+                    return Err(error(
+                        DiagnosticCode::DuplicateRecord,
+                        "neutral_change_id",
+                        "repeated source-defined transition identity",
+                    ));
+                }
+            }
+        }
         let mut references = 0usize;
         for claim in &mut input.changes {
             references = limits.checked_add(
@@ -548,18 +597,14 @@ impl NeutralChangeSet {
                         } else {
                             AbsenceStatus::Tentative
                         };
-                        next.absences.iter().any(|a| {
-                            a.asset_id == claim.asset_id && a.run_id == run.id && a.status == status
-                        }) && (status != AbsenceStatus::Confirmed
+                        absences.contains(&(
+                            claim.asset_id.as_str(),
+                            run.id.as_str(),
+                            if status == AbsenceStatus::Confirmed { 2 } else { 1 },
+                        )) && (status != AbsenceStatus::Confirmed
                             || (run.completeness == CollectionCompleteness::Complete
-                                && old
-                                    .observations
-                                    .iter()
-                                    .any(|o| o.asset_id == claim.asset_id)
-                                && next
-                                    .observations
-                                    .iter()
-                                    .all(|o| o.asset_id != claim.asset_id)))
+                                && old_assets.contains(claim.asset_id.as_str())
+                                && !next_assets.contains(claim.asset_id.as_str())))
                     }
                 }
             };
