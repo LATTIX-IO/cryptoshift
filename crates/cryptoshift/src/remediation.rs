@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     CapabilityEvidenceRef, CompatibilityAnalysis, CompatibilityCode, CompatibilityPrerequisite,
     CompatibilityStatus, DependencyTopology, Diagnostic, DiagnosticCode, EvidenceGraph,
-    GraphRelation, Limits, RISK_FACTOR_VERSION, ResourceKind, RiskFactorKind, RiskLevel,
-    RiskReport, SnapshotDigest, TargetProfile, ValidatedInventorySnapshot,
+    GraphRelation, Limits, RISK_FACTOR_VERSION, ResourceKind, RiskFactorKind, RiskFindingCode,
+    RiskLevel, RiskReport, RiskUncertainty, SnapshotDigest, TargetProfile, ValidatedInventorySnapshot,
 };
 
 /// Version of the immutable remediation finding, action, and export contract.
@@ -400,7 +400,7 @@ impl RemediationAnalyzer {
             for factor in &unit.factors {
                 enc.raw(&[factor.kind as u8])?;
                 enc.raw(&[factor.level.map_or(0, |level| level as u8 + 1)])?;
-                enc.string(&format!("{:?}", factor.uncertainty))?;
+                enc.raw(&[risk_uncertainty_tag(factor.uncertainty)])?;
                 let mut inventory_refs = factor.inventory_evidence_ids.clone();
                 inventory_refs.sort();
                 let mut assessment_refs = factor.assessment_references.clone();
@@ -413,7 +413,7 @@ impl RemediationAnalyzer {
             findings.sort_by_key(|v| (v.factor, v.code));
             for finding in findings {
                 enc.raw(&[finding.factor as u8])?;
-                enc.string(&format!("{:?}", finding.code))?;
+                enc.raw(&[risk_finding_code_tag(finding.code)])?;
             }
             if let Some(score) = &unit.score {
                 enc.flag(true)?;
@@ -1245,6 +1245,30 @@ fn deadline_for(target: &TargetProfile, unit: &str) -> Option<i64> {
                 || deadline.applies_to == target.content().profile_id
         })
         .map(|deadline| deadline.due_at_unix_secs)
+}
+
+// The v1 risk schema uses fixed tags, independent of Rust Debug names or
+// declaration order. Any change requires a reviewed schema generation.
+fn risk_uncertainty_tag(value: Option<RiskUncertainty>) -> u8 {
+    match value {
+        None => 0,
+        Some(RiskUncertainty::MissingAssessment) => 1,
+        Some(RiskUncertainty::NoConfirmedUse) => 2,
+        Some(RiskUncertainty::UnconfirmedUse) => 3,
+        Some(RiskUncertainty::WeakEvidence) => 4,
+        Some(RiskUncertainty::ConflictingEvidence) => 5,
+        Some(RiskUncertainty::IncompleteCoverage) => 6,
+        Some(RiskUncertainty::ScenarioAssumption) => 7,
+    }
+}
+
+fn risk_finding_code_tag(value: RiskFindingCode) -> u8 {
+    match value {
+        RiskFindingCode::UnresolvedFactor => 1,
+        RiskFindingCode::ElevatedFactor => 2,
+        RiskFindingCode::SusceptibleUse => 3,
+        RiskFindingCode::ScenarioDependent => 4,
+    }
 }
 
 fn evidence_rank(value: BlockerEvidenceState) -> u8 {
