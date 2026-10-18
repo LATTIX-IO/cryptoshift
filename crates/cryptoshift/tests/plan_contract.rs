@@ -1249,7 +1249,7 @@ fn shared_vendor_document_yields_independent_capability_facet_identities() {
     assert_ne!(facets[0].id, facets[1].id);
     assert_ne!(facets[0].subject, facets[1].subject);
     assert!(facets.iter().all(|item| matches!(
-        item.subject,
+        &item.subject,
         Some(PlanFacetSubject::Capability { .. })
     )));
 }
