@@ -23,8 +23,14 @@ impl<'a> NeutralWriter<'a> {
     }
 
     pub(crate) fn raw(&mut self, data: &[u8]) -> Result<(), Diagnostic> {
-        self.limits
-            .checked_add(ResourceKind::ExportBytes, self.bytes.len(), data.len())?;
+        let total = self.limits.checked_add(
+            ResourceKind::ExportBytes,
+            self.bytes.len(),
+            data.len(),
+        )?;
+        // An importer may set a smaller input budget than its export budget.
+        // Reject before extending a Vec rather than at finalization only.
+        self.limits.check(ResourceKind::InputBytes, total)?;
         self.bytes.extend_from_slice(data);
         Ok(())
     }
