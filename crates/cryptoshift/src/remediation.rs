@@ -50,6 +50,11 @@ pub enum RemediationEvidence {
         /// Target document source revision.
         source_revision: String,
     },
+    /// Exact separately sourced deadline claim, never a fabricated date.
+    TargetDeadline {
+        /// Original deadline-policy source reference.
+        reference_id: String,
+    },
 }
 
 /// No ordinal confidence inference from source verification claims.
@@ -1460,6 +1465,10 @@ impl<'a> Encoder<'a> {
                 for part in [issuer_id, document_id, source_revision] {
                     self.string(part)?;
                 }
+            }
+            RemediationEvidence::TargetDeadline { reference_id } => {
+                self.raw(&[5])?;
+                self.string(reference_id)?;
             }
         }
         Ok(())
