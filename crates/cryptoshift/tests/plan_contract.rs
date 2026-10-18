@@ -1149,64 +1149,81 @@ fn bind_peer(f: &mut Fixture, report: &CompatibilityAnalysis) {
     .unwrap();
 }
 
-
-
 #[test]
-fn peer_advertisements_without_authenticated_negotiation_cannot_complete_plan(){
-    let mut f=fixture(&["a","b"],&[],true,None);
-    let peer=peer_report(&f,false,false);
-    assert_ne!(peer.status(),CompatibilityStatus::Compatible);
-    bind_peer(&mut f,&peer);
-    let draft=build(&f,&plan(&f,2,1,&[]),&[],None,vec![]);
-    assert_eq!(draft.status(),PlanAssessmentState::Partial);
-    assert!(draft.residual_risks().iter().any(|risk|
-        risk.kind==ResidualRiskKind::PeerProtocol
-        || risk.kind==ResidualRiskKind::EvidenceQuality));
-    assert!(draft.readiness().iter().all(|u|
-        u.status != UnitReadinessStatus::EligibleForReview));
+fn peer_advertisements_without_authenticated_negotiation_cannot_complete_plan() {
+    let mut f = fixture(&["a", "b"], &[], true, None);
+    let peer = peer_report(&f, false, false);
+    assert_ne!(peer.status(), CompatibilityStatus::Compatible);
+    bind_peer(&mut f, &peer);
+    let draft = build(&f, &plan(&f, 2, 1, &[]), &[], None, vec![]);
+    assert_eq!(draft.status(), PlanAssessmentState::Partial);
+    assert!(
+        draft
+            .residual_risks()
+            .iter()
+            .any(|risk| risk.kind == ResidualRiskKind::PeerProtocol
+                || risk.kind == ResidualRiskKind::EvidenceQuality)
+    );
+    assert!(
+        draft
+            .readiness()
+            .iter()
+            .all(|u| u.status != UnitReadinessStatus::EligibleForReview)
+    );
 }
 
 #[test]
-fn claimed_exception_cannot_override_prohibited_classical_fallback(){
-    let mut f=fixture(&["a","b"],&[],true,None);
-    let peer=peer_report(&f,true,false);
-    bind_peer(&mut f,&peer);
-    let wave=plan(&f,2,1,&[]);
-    assert!(wave.readiness().iter().all(|u|u.status==UnitReadinessStatus::Blocked));
-    let blocked=build(&f,&wave,&[],None,vec![]);
-    let mut exception=proposal("fallback-request");
-    exception.claimed_approval=Some(purported_approval());
-    let still_blocked=build(&f,&wave,&[],None,vec![exception]);
-    assert_eq!(blocked.status(),PlanAssessmentState::Blocked);
-    assert_eq!(still_blocked.status(),PlanAssessmentState::Blocked);
-    assert_eq!(blocked.blocker_ids(),still_blocked.blocker_ids());
-    assert_eq!(blocked.action_ids(),still_blocked.action_ids());
-    assert_eq!(still_blocked.exceptions()[0].state,
-        PlanExceptionState::ClaimedApprovalUnverified);
+fn claimed_exception_cannot_override_prohibited_classical_fallback() {
+    let mut f = fixture(&["a", "b"], &[], true, None);
+    let peer = peer_report(&f, true, false);
+    bind_peer(&mut f, &peer);
+    let wave = plan(&f, 2, 1, &[]);
+    assert!(
+        wave.readiness()
+            .iter()
+            .all(|u| u.status == UnitReadinessStatus::Blocked)
+    );
+    let blocked = build(&f, &wave, &[], None, vec![]);
+    let mut exception = proposal("fallback-request");
+    exception.claimed_approval = Some(purported_approval());
+    let still_blocked = build(&f, &wave, &[], None, vec![exception]);
+    assert_eq!(blocked.status(), PlanAssessmentState::Blocked);
+    assert_eq!(still_blocked.status(), PlanAssessmentState::Blocked);
+    assert_eq!(blocked.blocker_ids(), still_blocked.blocker_ids());
+    assert_eq!(blocked.action_ids(), still_blocked.action_ids());
+    assert_eq!(
+        still_blocked.exceptions()[0].state,
+        PlanExceptionState::ClaimedApprovalUnverified
+    );
 }
 
 #[test]
-fn missing_certificate_chain_and_revocation_preserve_pki_residual_risk(){
-    let mut f=fixture(&["a","b"],&[],true,None);
-    let mut target=f.target.content().clone();
+fn missing_certificate_chain_and_revocation_preserve_pki_residual_risk() {
+    let mut f = fixture(&["a", "b"], &[], true, None);
+    let mut target = f.target.content().clone();
     target.standards.push(StandardEdition::Fips204_2024);
-    target.algorithms.push(AlgorithmConstraint{
-        algorithm:KnownAlgorithm::MlDsa87,role:AlgorithmRole::Signature,
-        minimum_category:Some(SecurityCategory::Five),
-        disposition:ConstraintDisposition::Required,
+    target.algorithms.push(AlgorithmConstraint {
+        algorithm: KnownAlgorithm::MlDsa87,
+        role: AlgorithmRole::Signature,
+        minimum_category: Some(SecurityCategory::Five),
+        disposition: ConstraintDisposition::Required,
     });
-    target.certificates.push(CertificateConstraint{
-        profile_id:"x509-profile".into(),revision:"v1".into(),
-        signature_algorithm:KnownAlgorithm::MlDsa87,
-        specification_reference:"profile-authority".into(),
+    target.certificates.push(CertificateConstraint {
+        profile_id: "x509-profile".into(),
+        revision: "v1".into(),
+        signature_algorithm: KnownAlgorithm::MlDsa87,
+        specification_reference: "profile-authority".into(),
     });
-    f.target=TargetProfile::new(target,&Limits::default(),Some(NOW)).unwrap();
-    let peer=peer_report(&f,false,true);
-    assert_ne!(peer.status(),CompatibilityStatus::Compatible);
-    bind_peer(&mut f,&peer);
-    let draft=build(&f,&plan(&f,2,1,&[]),&[],None,vec![]);
-    assert_eq!(draft.status(),PlanAssessmentState::Partial);
-    assert!(draft.residual_risks().iter().any(|risk|
-        risk.kind==ResidualRiskKind::PkiTrust
-        && risk.validation_gates.contains(&RemediationGate::ValidatePki)));
+    f.target = TargetProfile::new(target, &Limits::default(), Some(NOW)).unwrap();
+    let peer = peer_report(&f, false, true);
+    assert_ne!(peer.status(), CompatibilityStatus::Compatible);
+    bind_peer(&mut f, &peer);
+    let draft = build(&f, &plan(&f, 2, 1, &[]), &[], None, vec![]);
+    assert_eq!(draft.status(), PlanAssessmentState::Partial);
+    assert!(draft.residual_risks().iter().any(|risk| {
+        risk.kind == ResidualRiskKind::PkiTrust
+            && risk
+                .validation_gates
+                .contains(&RemediationGate::ValidatePki)
+    }));
 }
