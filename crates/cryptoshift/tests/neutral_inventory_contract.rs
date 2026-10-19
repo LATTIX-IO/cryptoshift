@@ -744,7 +744,6 @@ fn high_fanout_evidence_lookup_matches_only_current_observation_references() {
     assert_eq!(result.changes()[0].evidence_ids.len(), 129);
 }
 
-
 #[test]
 fn many_confirmed_absences_are_indexed_and_duplicate_claims_fail_closed() {
     let limits = Limits::default();
@@ -802,10 +801,12 @@ fn many_confirmed_absences_are_indexed_and_duplicate_claims_fail_closed() {
     )
     .unwrap();
     assert_eq!(confirmed.changes().len(), 193);
-    assert!(confirmed
-        .changes()
-        .iter()
-        .all(|entry| entry.kind == NeutralChangeKind::ConfirmedAbsent));
+    assert!(
+        confirmed
+            .changes()
+            .iter()
+            .all(|entry| entry.kind == NeutralChangeKind::ConfirmedAbsent)
+    );
 
     claims.reverse();
     let reordered = NeutralChangeSet::new(
