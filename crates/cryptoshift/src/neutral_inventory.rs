@@ -473,7 +473,11 @@ impl NeutralChangeSet {
                 (
                     absence.asset_id.as_str(),
                     absence.run_id.as_str(),
-                    if absence.status == AbsenceStatus::Confirmed { 2 } else { 1 },
+                    if absence.status == AbsenceStatus::Confirmed {
+                        2
+                    } else {
+                        1
+                    },
                 )
             })
             .collect();
@@ -600,7 +604,11 @@ impl NeutralChangeSet {
                         absences.contains(&(
                             claim.asset_id.as_str(),
                             run.id.as_str(),
-                            if status == AbsenceStatus::Confirmed { 2 } else { 1 },
+                            if status == AbsenceStatus::Confirmed {
+                                2
+                            } else {
+                                1
+                            },
                         )) && (status != AbsenceStatus::Confirmed
                             || (run.completeness == CollectionCompleteness::Complete
                                 && old_assets.contains(claim.asset_id.as_str())
