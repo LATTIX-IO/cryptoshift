@@ -274,6 +274,42 @@ impl NeutralInventoryAdapter {
         writer.u16(body.normalization_version)?;
         writer.digest(expected_inventory_digest)?;
         writer.digest(graph_digest)?;
+        // Critical profile metadata is checked by inventory envelope preflight.
+        // It is not included in the inventory's CSHIFT01 payload digest, so
+        // leaving it out of this pin would permit profile removal/replacement
+        // (including expiry bypass) while retaining a valid handoff digest.
+        // Bind *all* source-qualified identities, versions and expiry fields.
+        let mut critical_profiles = input.inventory.critical_profiles.to_vec();
+        critical_profiles.sort_by(|left, right| {
+            (
+                left.kind.as_str(),
+                left.id,
+                left.source_id,
+                left.version.major,
+                left.version.minor,
+                left.expires_at_unix_secs,
+            )
+                .cmp(&(
+                    right.kind.as_str(),
+                    right.id,
+                    right.source_id,
+                    right.version.major,
+                    right.version.minor,
+                    right.expires_at_unix_secs,
+                ))
+        });
+        writer.count(critical_profiles.len())?;
+        for profile in critical_profiles {
+            writer.string(profile.kind.as_str())?;
+            writer.string(profile.id)?;
+            writer.string(profile.source_id)?;
+            writer.u16(profile.version.major)?;
+            writer.u16(profile.version.minor)?;
+            writer.u8(u8::from(profile.expires_at_unix_secs.is_some()))?;
+            if let Some(expiry) = profile.expires_at_unix_secs {
+                writer.i64(expiry)?;
+            }
+        }
         let (canonical, handoff_digest) = writer.finish()?;
         Ok(NeutralInventoryProjection {
             source_id: input.producer_id.to_owned(),
