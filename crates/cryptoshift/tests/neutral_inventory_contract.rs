@@ -832,7 +832,6 @@ fn many_confirmed_absences_are_indexed_and_duplicate_claims_fail_closed() {
     );
 }
 
-
 #[test]
 fn pinned_critical_profiles_cannot_be_stripped_replaced_or_replayed_after_expiry() {
     let limits = Limits::default();
@@ -884,10 +883,12 @@ fn pinned_critical_profiles_cannot_be_stripped_replaced_or_replayed_after_expiry
         },
         ..base.clone()
     };
-    let canonical = NeutralInventoryAdapter::import_pinned(&same, pinned, &limits, NOW)
-        .unwrap();
+    let canonical = NeutralInventoryAdapter::import_pinned(&same, pinned, &limits, NOW).unwrap();
     assert_eq!(canonical.pins(), pinned);
-    assert_eq!(canonical.export(&limits).unwrap(), source.export(&limits).unwrap());
+    assert_eq!(
+        canonical.export(&limits).unwrap(),
+        source.export(&limits).unwrap()
+    );
 
     // Removing all required profiles leaves inventory and graph unchanged,
     // but must invalidate the source-qualified handoff pin.
@@ -898,8 +899,7 @@ fn pinned_critical_profiles_cannot_be_stripped_replaced_or_replayed_after_expiry
         },
         ..base.clone()
     };
-    let removed = NeutralInventoryAdapter::project(&stripped, raw.digest, &limits, NOW)
-        .unwrap();
+    let removed = NeutralInventoryAdapter::project(&stripped, raw.digest, &limits, NOW).unwrap();
     assert_eq!(removed.pins().inventory_digest, pinned.inventory_digest);
     assert_eq!(removed.pins().graph_digest, pinned.graph_digest);
     assert_ne!(removed.pins().handoff_digest, pinned.handoff_digest);
