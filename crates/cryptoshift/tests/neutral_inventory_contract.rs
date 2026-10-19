@@ -831,3 +831,115 @@ fn many_confirmed_absences_are_indexed_and_duplicate_claims_fail_closed() {
         DiagnosticCode::DuplicateRecord
     );
 }
+
+
+#[test]
+fn pinned_critical_profiles_cannot_be_stripped_replaced_or_replayed_after_expiry() {
+    let limits = Limits::default();
+    let raw = ValidatedInventorySnapshot::new(snapshot(false, true), &limits)
+        .unwrap()
+        .export(&limits)
+        .unwrap();
+    let (nodes, edges) = nodes("ev-old");
+    let profiles = [
+        CriticalProfileReference {
+            id: "target-v1",
+            kind: SchemaKind::TargetProfile,
+            version: SchemaVersion::V1_0,
+            source_id: "policy-issuer",
+            expires_at_unix_secs: Some(NOW + 120),
+        },
+        CriticalProfileReference {
+            id: "standards-v1",
+            kind: SchemaKind::StandardsProfile,
+            version: SchemaVersion::V1_0,
+            source_id: "standards-issuer",
+            expires_at_unix_secs: None,
+        },
+    ];
+    let base = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r1",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &profiles,
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    let source = NeutralInventoryAdapter::project(&base, raw.digest, &limits, NOW).unwrap();
+    let pinned = source.pins();
+
+    // Reordering identical metadata is not a material change.
+    let reordered = [profiles[1], profiles[0]];
+    let same = NeutralInventoryInput {
+        inventory: VersionedEnvelope {
+            critical_profiles: &reordered,
+            ..base.inventory
+        },
+        ..base.clone()
+    };
+    let canonical = NeutralInventoryAdapter::import_pinned(&same, pinned, &limits, NOW)
+        .unwrap();
+    assert_eq!(canonical.pins(), pinned);
+    assert_eq!(canonical.export(&limits).unwrap(), source.export(&limits).unwrap());
+
+    // Removing all required profiles leaves inventory and graph unchanged,
+    // but must invalidate the source-qualified handoff pin.
+    let stripped = NeutralInventoryInput {
+        inventory: VersionedEnvelope {
+            critical_profiles: &[],
+            ..base.inventory
+        },
+        ..base.clone()
+    };
+    let removed = NeutralInventoryAdapter::project(&stripped, raw.digest, &limits, NOW)
+        .unwrap();
+    assert_eq!(removed.pins().inventory_digest, pinned.inventory_digest);
+    assert_eq!(removed.pins().graph_digest, pinned.graph_digest);
+    assert_ne!(removed.pins().handoff_digest, pinned.handoff_digest);
+    assert_eq!(
+        NeutralInventoryAdapter::import_pinned(&stripped, pinned, &limits, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::IntegrityMismatch
+    );
+
+    // A modified expiry, issuer, or profile ID cannot inherit the old pin.
+    let replaced = [
+        CriticalProfileReference {
+            id: "target-other",
+            source_id: "different-issuer",
+            expires_at_unix_secs: Some(NOW + 300),
+            ..profiles[0]
+        },
+        profiles[1],
+    ];
+    let substitution = NeutralInventoryInput {
+        inventory: VersionedEnvelope {
+            critical_profiles: &replaced,
+            ..base.inventory
+        },
+        ..base.clone()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::import_pinned(&substitution, pinned, &limits, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::IntegrityMismatch
+    );
+
+    // Even the exact pinned original cannot be reused after a required
+    // profile expires at the caller's explicit UTC evaluation time.
+    assert_eq!(
+        NeutralInventoryAdapter::import_pinned(&base, pinned, &limits, NOW + 120)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::StaleCriticalProfile
+    );
+}
