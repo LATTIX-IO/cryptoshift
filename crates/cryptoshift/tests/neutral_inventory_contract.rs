@@ -743,3 +743,90 @@ fn high_fanout_evidence_lookup_matches_only_current_observation_references() {
     assert_eq!(result.changes().len(), 1);
     assert_eq!(result.changes()[0].evidence_ids.len(), 129);
 }
+
+
+#[test]
+fn many_confirmed_absences_are_indexed_and_duplicate_claims_fail_closed() {
+    let limits = Limits::default();
+    let mut previous = snapshot(false, true);
+    let mut current = snapshot(true, true);
+    let mut claims = vec![claim(NeutralChangeKind::ConfirmedAbsent, None, "legacy")];
+    for index in 0..192 {
+        let asset = format!("prior-asset-{index:04}");
+        previous.observations.push(CryptoObservation {
+            id: format!("prior-use-{index:04}"),
+            asset_id: asset.clone(),
+            algorithm_id: "RSA-2048".into(),
+            kind: CryptoUseKind::ActiveUse,
+            conflict: ConflictState::Uncontested,
+            evidence_ids: vec!["ev-old".into()],
+        });
+        current.absences.push(AbsenceRecord {
+            run_id: "scan-new".into(),
+            asset_id: asset.clone(),
+            status: AbsenceStatus::Confirmed,
+        });
+        claims.push(claim(NeutralChangeKind::ConfirmedAbsent, None, &asset));
+    }
+
+    let project_source = |snapshot: InventorySnapshot, revision: &str, evidence: &str| {
+        let artifact = ValidatedInventorySnapshot::new(snapshot, &limits)
+            .unwrap()
+            .export(&limits)
+            .unwrap();
+        let (nodes, edges) = nodes(evidence);
+        let doc = NeutralInventoryInput {
+            schema_version: NEUTRAL_INVENTORY_VERSION,
+            producer_id: PRODUCER,
+            producer_revision: revision,
+            scope_id: "tenant-a",
+            inventory: VersionedEnvelope {
+                schema: SchemaKind::InventorySnapshot,
+                version: SchemaVersion::V1_0,
+                payload: &artifact.bytes,
+                source_id: PRODUCER,
+                critical_profiles: &[],
+            },
+            nodes: &nodes,
+            edges: &edges,
+        };
+        NeutralInventoryAdapter::project(&doc, artifact.digest, &limits, NOW).unwrap()
+    };
+    let before = project_source(previous, "r1", "ev-old");
+    let after = project_source(current, "r2", "ev-new");
+    let confirmed = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, claims.clone()),
+        &limits,
+    )
+    .unwrap();
+    assert_eq!(confirmed.changes().len(), 193);
+    assert!(confirmed
+        .changes()
+        .iter()
+        .all(|entry| entry.kind == NeutralChangeKind::ConfirmedAbsent));
+
+    claims.reverse();
+    let reordered = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, claims.clone()),
+        &limits,
+    )
+    .unwrap();
+    assert_eq!(confirmed.digest(), reordered.digest());
+    assert_eq!(
+        confirmed.export(&limits).unwrap(),
+        reordered.export(&limits).unwrap()
+    );
+
+    // A duplicate source event must be rejected before repeated provenance lookups.
+    claims.push(claim(NeutralChangeKind::ConfirmedAbsent, None, "legacy"));
+    assert_eq!(
+        NeutralChangeSet::new(&before, &after, input(&before, &after, claims), &limits)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::DuplicateRecord
+    );
+}
