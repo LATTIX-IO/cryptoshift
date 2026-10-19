@@ -1,0 +1,11 @@
+[package]
+name = "cryptoshift-neutral-consumer"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[dependencies]
+cryptoshift = { path = "../../crates/cryptoshift" }
+
+[workspace]

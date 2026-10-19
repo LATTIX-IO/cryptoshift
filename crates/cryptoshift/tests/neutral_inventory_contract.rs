@@ -1,0 +1,945 @@
+//! External-public-API acceptance for independently versioned neutral fixtures.
+
+#![allow(clippy::unwrap_used, clippy::expect_used)] // Bounded synthetic fixture assertions.
+use cryptoshift::*;
+
+const NOW: i64 = 1_800_000_000;
+const PRODUCER: &str = "synthetic-collector";
+
+fn snapshot(new: bool, complete: bool) -> InventorySnapshot {
+    let run = if new { "scan-new" } else { "scan-old" };
+    let evidence = if new { "ev-new" } else { "ev-old" };
+    let scope = "tenant-a";
+    let mut observations = vec![CryptoObservation {
+        id: "obs-proto".into(),
+        asset_id: "srv".into(),
+        algorithm_id: "RSA-2048".into(),
+        kind: CryptoUseKind::ConfiguredProtocol,
+        conflict: if new {
+            ConflictState::Conflicted
+        } else {
+            ConflictState::Uncontested
+        },
+        evidence_ids: vec![evidence.into()],
+    }];
+    if !new {
+        observations.push(CryptoObservation {
+            id: "obs-legacy".into(),
+            asset_id: "legacy".into(),
+            algorithm_id: "RSA-2048".into(),
+            kind: CryptoUseKind::ActiveUse,
+            conflict: ConflictState::Uncontested,
+            evidence_ids: vec![evidence.into()],
+        });
+    } else {
+        observations.push(CryptoObservation {
+            id: "obs-negotiated".into(),
+            asset_id: "srv".into(),
+            algorithm_id: "ML-KEM-1024".into(),
+            kind: CryptoUseKind::NegotiatedProtocol,
+            conflict: ConflictState::Uncontested,
+            evidence_ids: vec![evidence.into()],
+        });
+    }
+    InventorySnapshot {
+        identity_version: IDENTITY_VERSION,
+        normalization_version: NORMALIZATION_VERSION,
+        scope_id: scope.into(),
+        runs: vec![CollectionRun {
+            id: run.into(),
+            source_id: PRODUCER.into(),
+            scope_id: scope.into(),
+            collected_at_unix_secs: if new { NOW - 10 } else { NOW - 100 },
+            completeness: if new {
+                if complete {
+                    CollectionCompleteness::Complete
+                } else {
+                    CollectionCompleteness::Partial
+                }
+            } else {
+                CollectionCompleteness::Complete
+            },
+        }],
+        evidence: vec![EvidenceRecord {
+            id: evidence.into(),
+            run_id: run.into(),
+            source_id: PRODUCER.into(),
+            basis: EvidenceBasis::Direct,
+            confidence_bps: 9500,
+            observed_at_unix_secs: if new { NOW - 10 } else { NOW - 100 },
+        }],
+        observations,
+        absences: if new {
+            vec![AbsenceRecord {
+                run_id: run.into(),
+                asset_id: "legacy".into(),
+                status: if complete {
+                    AbsenceStatus::Confirmed
+                } else {
+                    AbsenceStatus::Tentative
+                },
+            }]
+        } else {
+            vec![]
+        },
+    }
+}
+
+fn nodes(evidence: &str) -> (Vec<GraphNode>, Vec<GraphEdge>) {
+    (
+        vec![
+            GraphNode {
+                id: "srv".into(),
+                kind: GraphNodeKind::System,
+                evidence_ids: vec![evidence.into()],
+                observation_id: None,
+                observation_kind: None,
+            },
+            GraphNode {
+                id: "owner".into(),
+                kind: GraphNodeKind::Owner,
+                evidence_ids: vec![evidence.into()],
+                observation_id: None,
+                observation_kind: None,
+            },
+        ],
+        vec![GraphEdge {
+            from: "srv".into(),
+            to: "owner".into(),
+            relation: GraphRelation::OwnedBy,
+            evidence_ids: vec![evidence.into()],
+        }],
+    )
+}
+
+fn project(new: bool, complete: bool) -> NeutralInventoryProjection {
+    let raw = ValidatedInventorySnapshot::new(snapshot(new, complete), &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let rev = if new { "r2" } else { "r1" };
+    let (nodes, edges) = nodes(if new { "ev-new" } else { "ev-old" });
+    let input = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: rev,
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    let observed =
+        NeutralInventoryAdapter::project(&input, raw.digest, &Limits::default(), NOW).unwrap();
+    let checked =
+        NeutralInventoryAdapter::import_pinned(&input, observed.pins(), &Limits::default(), NOW)
+            .unwrap();
+    assert_eq!(checked.pins(), observed.pins());
+    assert_eq!(
+        checked.export(&Limits::default()).unwrap(),
+        observed.export(&Limits::default()).unwrap()
+    );
+    checked
+}
+
+fn claim(kind: NeutralChangeKind, id: Option<&str>, asset: &str) -> NeutralChangeClaim {
+    NeutralChangeClaim {
+        kind,
+        asset_id: asset.into(),
+        observation_id: id.map(str::to_owned),
+        run_id: "scan-new".into(),
+        evidence_ids: vec!["ev-new".into()],
+    }
+}
+
+fn input(
+    before: &NeutralInventoryProjection,
+    after: &NeutralInventoryProjection,
+    changes: Vec<NeutralChangeClaim>,
+) -> NeutralChangeSetInput {
+    NeutralChangeSetInput {
+        schema_version: NEUTRAL_CHANGE_VERSION,
+        scope_id: "tenant-a".into(),
+        producer_id: PRODUCER.into(),
+        producer_revision: "r2".into(),
+        expected_before: before.pins().handoff_digest,
+        expected_after: after.pins().handoff_digest,
+        changes,
+    }
+}
+
+#[test]
+fn cryptoshift_v1_inventory_bytes_roundtrip_with_independent_pin() {
+    let one = project(false, true);
+    assert_eq!(one.producer_id(), PRODUCER);
+    assert_eq!(one.inventory().snapshot().observations.len(), 2);
+    assert_eq!(one.graph().nodes().len(), 2);
+    assert!(
+        one.export(&Limits::default())
+            .unwrap()
+            .starts_with(b"CSHIFT_NEUTRAL_INV_V1")
+    );
+    assert_eq!(
+        one.inventory().snapshot().observations[1].kind,
+        CryptoUseKind::ConfiguredProtocol
+    );
+    let two = project(false, true);
+    assert_eq!(one.pins(), two.pins());
+}
+
+#[test]
+fn configured_protocol_and_new_negotiation_are_distinct_observations() {
+    let after = project(true, false);
+    let snapshot = after.inventory().snapshot();
+    assert_eq!(
+        snapshot.observations[0].kind,
+        CryptoUseKind::NegotiatedProtocol
+    );
+    assert_eq!(
+        snapshot.observations[1].kind,
+        CryptoUseKind::ConfiguredProtocol
+    );
+    assert_eq!(snapshot.absences[0].status, AbsenceStatus::Tentative);
+    assert_eq!(
+        snapshot.runs[0].completeness,
+        CollectionCompleteness::Partial
+    );
+}
+
+#[test]
+fn unknown_or_wrong_source_versions_and_graph_are_rejected() {
+    let raw = ValidatedInventorySnapshot::new(snapshot(false, true), &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (nodes, edges) = nodes("ev-old");
+    let base = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r1",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    let good =
+        NeutralInventoryAdapter::project(&base, raw.digest, &Limits::default(), NOW).unwrap();
+    let mut bad = base.clone();
+    bad.schema_version = 7;
+    assert_eq!(
+        NeutralInventoryAdapter::project(&bad, raw.digest, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::UnsupportedSchemaVersion
+    );
+    bad = base.clone();
+    bad.scope_id = "tenant-b";
+    assert_eq!(
+        NeutralInventoryAdapter::project(&bad, raw.digest, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::UnsupportedIdentityVersion
+    );
+    bad = base.clone();
+    bad.inventory.source_id = "different-publisher";
+    assert_eq!(
+        NeutralInventoryAdapter::project(&bad, raw.digest, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::InvalidReference
+    );
+    let mut trusted = good.pins();
+    trusted.graph_digest = SnapshotDigest::from_bytes([9; 32]);
+    assert_eq!(
+        NeutralInventoryAdapter::import_pinned(&base, trusted, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::IntegrityMismatch
+    );
+    trusted = good.pins();
+    trusted.handoff_digest = SnapshotDigest::from_bytes([8; 32]);
+    assert_eq!(
+        NeutralInventoryAdapter::import_pinned(&base, trusted, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::IntegrityMismatch
+    );
+    bad = base.clone();
+    bad.inventory.version = SchemaVersion { major: 2, minor: 0 };
+    assert!(NeutralInventoryAdapter::project(&bad, raw.digest, &Limits::default(), NOW).is_err());
+}
+
+#[test]
+fn future_or_unreferenced_graph_evidence_is_not_accepted() {
+    let raw = ValidatedInventorySnapshot::new(snapshot(false, true), &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (mut bad_nodes, edges) = nodes("ev-old");
+    bad_nodes[1].evidence_ids = vec!["unknown".into()];
+    let doc = NeutralInventoryInput {
+        schema_version: 1,
+        producer_id: PRODUCER,
+        producer_revision: "r1",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &bad_nodes,
+        edges: &edges,
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&doc, raw.digest, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::InvalidReference
+    );
+    let (nodes, edges) = nodes("ev-old");
+    let doc = NeutralInventoryInput {
+        nodes: &nodes,
+        edges: &edges,
+        ..doc
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&doc, raw.digest, &Limits::default(), NOW - 200)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::InvalidStateTransition
+    );
+}
+
+#[test]
+fn partial_run_never_claims_confirmed_removal() {
+    let mut invalid = snapshot(true, false);
+    invalid.absences[0].status = AbsenceStatus::Confirmed;
+    assert_eq!(
+        ValidatedInventorySnapshot::new(invalid, &Limits::default())
+            .unwrap_err()
+            .code,
+        DiagnosticCode::InvalidStateTransition
+    );
+}
+
+#[test]
+fn tentative_changes_and_added_negotiation_have_exact_evidence() {
+    let before = project(false, true);
+    let after = project(true, false);
+    let changes = vec![
+        claim(NeutralChangeKind::TentativeAbsent, None, "legacy"),
+        claim(
+            NeutralChangeKind::ObservationAdded,
+            Some("obs-negotiated"),
+            "srv",
+        ),
+        claim(
+            NeutralChangeKind::ObservationModified,
+            Some("obs-proto"),
+            "srv",
+        ),
+        claim(
+            NeutralChangeKind::ObservationConflicted,
+            Some("obs-proto"),
+            "srv",
+        ),
+    ];
+    let one = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, changes.clone()),
+        &Limits::default(),
+    )
+    .unwrap();
+    let mut reversed = changes;
+    reversed.reverse();
+    let two = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, reversed),
+        &Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(one.digest(), two.digest());
+    assert_eq!(one.changes().len(), 4);
+    assert_eq!(
+        one.export(&Limits::default()).unwrap(),
+        two.export(&Limits::default()).unwrap()
+    );
+    assert_eq!(one.before_digest(), before.pins().handoff_digest);
+    assert_eq!(one.after_digest(), after.pins().handoff_digest);
+}
+
+#[test]
+fn complete_rescan_claims_absence_only_if_previously_observed() {
+    let before = project(false, true);
+    let after = project(true, true);
+    let correct = claim(NeutralChangeKind::ConfirmedAbsent, None, "legacy");
+    assert!(
+        NeutralChangeSet::new(
+            &before,
+            &after,
+            input(&before, &after, vec![correct]),
+            &Limits::default()
+        )
+        .is_ok()
+    );
+    let partial = project(true, false);
+    let false_claim = claim(NeutralChangeKind::ConfirmedAbsent, None, "legacy");
+    assert_eq!(
+        NeutralChangeSet::new(
+            &before,
+            &partial,
+            input(&before, &partial, vec![false_claim]),
+            &Limits::default()
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::InvalidStateTransition
+    );
+    let false_asset = claim(NeutralChangeKind::ConfirmedAbsent, None, "never-known");
+    assert_eq!(
+        NeutralChangeSet::new(
+            &before,
+            &after,
+            input(&before, &after, vec![false_asset]),
+            &Limits::default()
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::InvalidStateTransition
+    );
+}
+
+#[test]
+fn duplicate_and_replayed_or_wrong_revision_changes_fail_closed() {
+    let before = project(false, true);
+    let after = project(true, false);
+    let change = claim(NeutralChangeKind::TentativeAbsent, None, "legacy");
+    let mut duplicate = input(&before, &after, vec![change.clone(), change]);
+    assert_eq!(
+        NeutralChangeSet::new(&before, &after, duplicate.clone(), &Limits::default())
+            .unwrap_err()
+            .code,
+        DiagnosticCode::DuplicateRecord
+    );
+    duplicate.changes.truncate(1);
+    duplicate.expected_before = after.pins().handoff_digest;
+    assert_eq!(
+        NeutralChangeSet::new(&before, &after, duplicate.clone(), &Limits::default())
+            .unwrap_err()
+            .code,
+        DiagnosticCode::IntegrityMismatch
+    );
+    duplicate.expected_before = before.pins().handoff_digest;
+    duplicate.producer_revision = "r0".into();
+    assert_eq!(
+        NeutralChangeSet::new(&before, &after, duplicate, &Limits::default())
+            .unwrap_err()
+            .code,
+        DiagnosticCode::InvalidReference
+    );
+}
+
+#[test]
+fn wrong_evidence_run_and_transition_type_are_rejected() {
+    let before = project(false, true);
+    let after = project(true, false);
+    let mut c = claim(
+        NeutralChangeKind::ObservationAdded,
+        Some("obs-negotiated"),
+        "srv",
+    );
+    c.evidence_ids = vec!["ev-old".into()];
+    assert_eq!(
+        NeutralChangeSet::new(
+            &before,
+            &after,
+            input(&before, &after, vec![c]),
+            &Limits::default()
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::InvalidReference
+    );
+    let c = claim(
+        NeutralChangeKind::ObservationAdded,
+        Some("obs-proto"),
+        "srv",
+    );
+    assert_eq!(
+        NeutralChangeSet::new(
+            &before,
+            &after,
+            input(&before, &after, vec![c]),
+            &Limits::default()
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::InvalidStateTransition
+    );
+}
+
+#[test]
+fn tight_limits_reject_existing_snapshot_graph_and_delta() {
+    let raw = ValidatedInventorySnapshot::new(snapshot(false, true), &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (nodes, edges) = nodes("ev-old");
+    let doc = NeutralInventoryInput {
+        schema_version: 1,
+        producer_id: PRODUCER,
+        producer_revision: "r1",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    let tight = Limits {
+        max_graph_nodes: 1,
+        ..Limits::default()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&doc, raw.digest, &tight, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
+    let tight = Limits {
+        max_input_bytes: raw.bytes.len() - 1,
+        ..Limits::default()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&doc, raw.digest, &tight, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
+    let before = project(false, true);
+    let after = project(true, false);
+    let tight = Limits {
+        max_evidence_records: 1,
+        ..Limits::default()
+    };
+    assert_eq!(
+        NeutralChangeSet::new(
+            &before,
+            &after,
+            input(
+                &before,
+                &after,
+                vec![
+                    claim(
+                        NeutralChangeKind::ObservationAdded,
+                        Some("obs-negotiated"),
+                        "srv"
+                    ),
+                    claim(NeutralChangeKind::TentativeAbsent, None, "legacy"),
+                ]
+            ),
+            &tight
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
+}
+
+#[test]
+fn frozen_neutral_change_v1_content_identity() {
+    let before = project(false, true);
+    let after = project(true, false);
+    let changes = vec![
+        claim(
+            NeutralChangeKind::ObservationModified,
+            Some("obs-proto"),
+            "srv",
+        ),
+        claim(NeutralChangeKind::TentativeAbsent, None, "legacy"),
+    ];
+    let frozen = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, changes),
+        &Limits::default(),
+    )
+    .unwrap();
+    let bytes = frozen.export(&Limits::default()).unwrap();
+    assert_eq!(
+        format!("{} {}", frozen.digest().as_identifier(), bytes.len()),
+        include_str!("fixtures/neutral_change_v1.sha256").trim()
+    );
+}
+
+#[test]
+fn inferred_only_negotiation_cannot_be_promoted_to_observed_wire_fact() {
+    let mut untrusted = snapshot(true, false);
+    untrusted.evidence[0].basis = EvidenceBasis::Inferred;
+    let artifact = ValidatedInventorySnapshot::new(untrusted, &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (nodes, edges) = nodes("ev-new");
+    let submitted = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r2",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &artifact.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&submitted, artifact.digest, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::InvalidStateTransition,
+    );
+}
+
+#[test]
+fn graph_reference_budgets_and_identifiers_fail_before_cloning() {
+    let raw = ValidatedInventorySnapshot::new(snapshot(false, true), &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (nodes, edges) = nodes("ev-old");
+    let base = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r1",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    // Two node references plus one edge reference exceed this budget,
+    // although the *count* of edges is only one.
+    let refs_tight = Limits {
+        max_graph_edges: 2,
+        ..Limits::default()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&base, raw.digest, &refs_tight, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
+    let mut bad_nodes = nodes.clone();
+    bad_nodes[0].id = "X".repeat(257);
+    let invalid = NeutralInventoryInput {
+        nodes: &bad_nodes,
+        ..base.clone()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&invalid, raw.digest, &Limits::default(), NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::InvalidIdentifier
+    );
+    // The outer inventory bytes fit, but cloned graph fields would exceed
+    // the active aggregate input budget.
+    let bytes_tight = Limits {
+        max_input_bytes: raw.bytes.len() + 1,
+        ..Limits::default()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::project(&base, raw.digest, &bytes_tight, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::ResourceLimitExceeded
+    );
+}
+
+#[test]
+fn high_fanout_evidence_lookup_matches_only_current_observation_references() {
+    let before = project(false, true);
+    let mut current = snapshot(true, false);
+    let mut references = vec!["ev-new".to_owned()];
+    for i in 0..128 {
+        let id = format!("ev-extra-{i:03}");
+        current.evidence.push(EvidenceRecord {
+            id: id.clone(),
+            run_id: "scan-new".into(),
+            source_id: PRODUCER.into(),
+            basis: EvidenceBasis::Direct,
+            confidence_bps: 9000,
+            observed_at_unix_secs: NOW - 10,
+        });
+        current.observations[0].evidence_ids.push(id.clone());
+        references.push(id);
+    }
+    // Deliberately reversed incoming order to test canonicalized,
+    // binary-searchable evidence membership rather than linear scans.
+    current.observations[0].evidence_ids.reverse();
+    let raw = ValidatedInventorySnapshot::new(current, &Limits::default())
+        .unwrap()
+        .export(&Limits::default())
+        .unwrap();
+    let (nodes, edges) = nodes("ev-new");
+    let input_doc = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r2",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &[],
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    let after =
+        NeutralInventoryAdapter::project(&input_doc, raw.digest, &Limits::default(), NOW).unwrap();
+    references.reverse();
+    let mut modified = claim(
+        NeutralChangeKind::ObservationModified,
+        Some("obs-proto"),
+        "srv",
+    );
+    modified.evidence_ids = references;
+    let result = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, vec![modified]),
+        &Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(result.changes().len(), 1);
+    assert_eq!(result.changes()[0].evidence_ids.len(), 129);
+}
+
+#[test]
+fn many_confirmed_absences_are_indexed_and_duplicate_claims_fail_closed() {
+    let limits = Limits::default();
+    let mut previous = snapshot(false, true);
+    let mut current = snapshot(true, true);
+    let mut claims = vec![claim(NeutralChangeKind::ConfirmedAbsent, None, "legacy")];
+    for index in 0..192 {
+        let asset = format!("prior-asset-{index:04}");
+        previous.observations.push(CryptoObservation {
+            id: format!("prior-use-{index:04}"),
+            asset_id: asset.clone(),
+            algorithm_id: "RSA-2048".into(),
+            kind: CryptoUseKind::ActiveUse,
+            conflict: ConflictState::Uncontested,
+            evidence_ids: vec!["ev-old".into()],
+        });
+        current.absences.push(AbsenceRecord {
+            run_id: "scan-new".into(),
+            asset_id: asset.clone(),
+            status: AbsenceStatus::Confirmed,
+        });
+        claims.push(claim(NeutralChangeKind::ConfirmedAbsent, None, &asset));
+    }
+
+    let project_source = |snapshot: InventorySnapshot, revision: &str, evidence: &str| {
+        let artifact = ValidatedInventorySnapshot::new(snapshot, &limits)
+            .unwrap()
+            .export(&limits)
+            .unwrap();
+        let (nodes, edges) = nodes(evidence);
+        let doc = NeutralInventoryInput {
+            schema_version: NEUTRAL_INVENTORY_VERSION,
+            producer_id: PRODUCER,
+            producer_revision: revision,
+            scope_id: "tenant-a",
+            inventory: VersionedEnvelope {
+                schema: SchemaKind::InventorySnapshot,
+                version: SchemaVersion::V1_0,
+                payload: &artifact.bytes,
+                source_id: PRODUCER,
+                critical_profiles: &[],
+            },
+            nodes: &nodes,
+            edges: &edges,
+        };
+        NeutralInventoryAdapter::project(&doc, artifact.digest, &limits, NOW).unwrap()
+    };
+    let before = project_source(previous, "r1", "ev-old");
+    let after = project_source(current, "r2", "ev-new");
+    let confirmed = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, claims.clone()),
+        &limits,
+    )
+    .unwrap();
+    assert_eq!(confirmed.changes().len(), 193);
+    assert!(
+        confirmed
+            .changes()
+            .iter()
+            .all(|entry| entry.kind == NeutralChangeKind::ConfirmedAbsent)
+    );
+
+    claims.reverse();
+    let reordered = NeutralChangeSet::new(
+        &before,
+        &after,
+        input(&before, &after, claims.clone()),
+        &limits,
+    )
+    .unwrap();
+    assert_eq!(confirmed.digest(), reordered.digest());
+    assert_eq!(
+        confirmed.export(&limits).unwrap(),
+        reordered.export(&limits).unwrap()
+    );
+
+    // A duplicate source event must be rejected before repeated provenance lookups.
+    claims.push(claim(NeutralChangeKind::ConfirmedAbsent, None, "legacy"));
+    assert_eq!(
+        NeutralChangeSet::new(&before, &after, input(&before, &after, claims), &limits)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::DuplicateRecord
+    );
+}
+
+#[test]
+fn pinned_critical_profiles_cannot_be_stripped_replaced_or_replayed_after_expiry() {
+    let limits = Limits::default();
+    let raw = ValidatedInventorySnapshot::new(snapshot(false, true), &limits)
+        .unwrap()
+        .export(&limits)
+        .unwrap();
+    let (nodes, edges) = nodes("ev-old");
+    let profiles = [
+        CriticalProfileReference {
+            id: "target-v1",
+            kind: SchemaKind::TargetProfile,
+            version: SchemaVersion::V1_0,
+            source_id: "policy-issuer",
+            expires_at_unix_secs: Some(NOW + 120),
+        },
+        CriticalProfileReference {
+            id: "standards-v1",
+            kind: SchemaKind::StandardsProfile,
+            version: SchemaVersion::V1_0,
+            source_id: "standards-issuer",
+            expires_at_unix_secs: None,
+        },
+    ];
+    let base = NeutralInventoryInput {
+        schema_version: NEUTRAL_INVENTORY_VERSION,
+        producer_id: PRODUCER,
+        producer_revision: "r1",
+        scope_id: "tenant-a",
+        inventory: VersionedEnvelope {
+            schema: SchemaKind::InventorySnapshot,
+            version: SchemaVersion::V1_0,
+            payload: &raw.bytes,
+            source_id: PRODUCER,
+            critical_profiles: &profiles,
+        },
+        nodes: &nodes,
+        edges: &edges,
+    };
+    let source = NeutralInventoryAdapter::project(&base, raw.digest, &limits, NOW).unwrap();
+    let pinned = source.pins();
+
+    // Reordering identical metadata is not a material change.
+    let reordered = [profiles[1], profiles[0]];
+    let same = NeutralInventoryInput {
+        inventory: VersionedEnvelope {
+            critical_profiles: &reordered,
+            ..base.inventory
+        },
+        ..base.clone()
+    };
+    let canonical = NeutralInventoryAdapter::import_pinned(&same, pinned, &limits, NOW).unwrap();
+    assert_eq!(canonical.pins(), pinned);
+    assert_eq!(
+        canonical.export(&limits).unwrap(),
+        source.export(&limits).unwrap()
+    );
+
+    // Removing all required profiles leaves inventory and graph unchanged,
+    // but must invalidate the source-qualified handoff pin.
+    let stripped = NeutralInventoryInput {
+        inventory: VersionedEnvelope {
+            critical_profiles: &[],
+            ..base.inventory
+        },
+        ..base.clone()
+    };
+    let removed = NeutralInventoryAdapter::project(&stripped, raw.digest, &limits, NOW).unwrap();
+    assert_eq!(removed.pins().inventory_digest, pinned.inventory_digest);
+    assert_eq!(removed.pins().graph_digest, pinned.graph_digest);
+    assert_ne!(removed.pins().handoff_digest, pinned.handoff_digest);
+    assert_eq!(
+        NeutralInventoryAdapter::import_pinned(&stripped, pinned, &limits, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::IntegrityMismatch
+    );
+
+    // A modified expiry, issuer, or profile ID cannot inherit the old pin.
+    let replaced = [
+        CriticalProfileReference {
+            id: "target-other",
+            source_id: "different-issuer",
+            expires_at_unix_secs: Some(NOW + 300),
+            ..profiles[0]
+        },
+        profiles[1],
+    ];
+    let substitution = NeutralInventoryInput {
+        inventory: VersionedEnvelope {
+            critical_profiles: &replaced,
+            ..base.inventory
+        },
+        ..base.clone()
+    };
+    assert_eq!(
+        NeutralInventoryAdapter::import_pinned(&substitution, pinned, &limits, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::IntegrityMismatch
+    );
+
+    // Even the exact pinned original cannot be reused after a required
+    // profile expires at the caller's explicit UTC evaluation time.
+    assert_eq!(
+        NeutralInventoryAdapter::import_pinned(&base, pinned, &limits, NOW + 120)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::StaleCriticalProfile
+    );
+}
