@@ -23,7 +23,9 @@ struct Case {
 }
 
 fn cases() -> Vec<Case> {
-    let mut lines = CASES.lines().filter(|line| !line.is_empty() && !line.starts_with('#'));
+    let mut lines = CASES
+        .lines()
+        .filter(|line| !line.is_empty() && !line.starts_with('#'));
     assert_eq!(
         lines.next(),
         Some("v1|scenario|system|algorithm|use|evidence|collection"),
@@ -57,10 +59,19 @@ fn cases() -> Vec<Case> {
             }
         })
         .collect();
-    assert_eq!(cases.len(), 5, "all five enterprise domains must be present");
     assert_eq!(
-        cases.iter().map(|c| c.id).collect::<std::collections::BTreeSet<_>>(),
-        ["transport", "pki", "codesign", "kms", "vendor"].into_iter().collect()
+        cases.len(),
+        5,
+        "all five enterprise domains must be present"
+    );
+    assert_eq!(
+        cases
+            .iter()
+            .map(|c| c.id)
+            .collect::<std::collections::BTreeSet<_>>(),
+        ["transport", "pki", "codesign", "kms", "vendor"]
+            .into_iter()
+            .collect()
     );
     cases
 }
@@ -295,29 +306,38 @@ fn build(seed: u64, changed_source: bool) -> Pipeline {
     let limits = Limits::default();
     let mut cases = cases();
     shuffled(&mut cases, seed);
-    let runs = cases.iter().map(|c| CollectionRun {
-        id: format!("run-{}", c.id),
-        source_id: PRODUCER.into(),
-        scope_id: TENANT.into(),
-        collected_at_unix_secs: NOW - 100,
-        completeness: c.complete,
-    }).collect();
-    let evidence = cases.iter().map(|c| EvidenceRecord {
-        id: format!("ev-{}", c.id),
-        run_id: format!("run-{}", c.id),
-        source_id: PRODUCER.into(),
-        basis: c.basis,
-        confidence_bps: 9200,
-        observed_at_unix_secs: NOW - 100,
-    }).collect();
-    let mut observations: Vec<_> = cases.iter().map(|c| CryptoObservation {
-        id: format!("obs-{}", c.id),
-        asset_id: c.system.into(),
-        algorithm_id: c.algorithm.into(),
-        kind: c.kind,
-        conflict: ConflictState::Uncontested,
-        evidence_ids: vec![format!("ev-{}", c.id)],
-    }).collect();
+    let runs = cases
+        .iter()
+        .map(|c| CollectionRun {
+            id: format!("run-{}", c.id),
+            source_id: PRODUCER.into(),
+            scope_id: TENANT.into(),
+            collected_at_unix_secs: NOW - 100,
+            completeness: c.complete,
+        })
+        .collect();
+    let evidence = cases
+        .iter()
+        .map(|c| EvidenceRecord {
+            id: format!("ev-{}", c.id),
+            run_id: format!("run-{}", c.id),
+            source_id: PRODUCER.into(),
+            basis: c.basis,
+            confidence_bps: 9200,
+            observed_at_unix_secs: NOW - 100,
+        })
+        .collect();
+    let mut observations: Vec<_> = cases
+        .iter()
+        .map(|c| CryptoObservation {
+            id: format!("obs-{}", c.id),
+            asset_id: c.system.into(),
+            algorithm_id: c.algorithm.into(),
+            kind: c.kind,
+            conflict: ConflictState::Uncontested,
+            evidence_ids: vec![format!("ev-{}", c.id)],
+        })
+        .collect();
     // Directly reported is still a source claim, not authenticated negotiation.
     observations.push(CryptoObservation {
         id: "obs-transport-negotiated".into(),
@@ -328,8 +348,11 @@ fn build(seed: u64, changed_source: bool) -> Pipeline {
         evidence_ids: vec!["ev-transport".into()],
     });
     if changed_source {
-        observations.iter_mut().find(|o| o.id == "obs-codesign").unwrap().algorithm_id =
-            "RSA-3072".into();
+        observations
+            .iter_mut()
+            .find(|o| o.id == "obs-codesign")
+            .unwrap()
+            .algorithm_id = "RSA-3072".into();
     }
     let inventory = ValidatedInventorySnapshot::new(
         InventorySnapshot {
@@ -342,7 +365,8 @@ fn build(seed: u64, changed_source: bool) -> Pipeline {
             absences: vec![],
         },
         &limits,
-    ).unwrap();
+    )
+    .unwrap();
     let mut nodes = vec![node("owner-security", GraphNodeKind::Owner, "ev-transport")];
     let mut edges = Vec::new();
     for case in &cases {
@@ -355,9 +379,18 @@ fn build(seed: u64, changed_source: bool) -> Pipeline {
             observation_id: Some(format!("obs-{}", case.id)),
             observation_kind: Some(case.kind),
         });
-        edges.push(edge(case.system, &format!("use-{}", case.id),
-            GraphRelation::ExposesUse, &ev));
-        edges.push(edge(case.system, "owner-security", GraphRelation::OwnedBy, &ev));
+        edges.push(edge(
+            case.system,
+            &format!("use-{}", case.id),
+            GraphRelation::ExposesUse,
+            &ev,
+        ));
+        edges.push(edge(
+            case.system,
+            "owner-security",
+            GraphRelation::OwnedBy,
+            &ev,
+        ));
     }
     nodes.push(GraphNode {
         id: "use-transport-negotiated".into(),
@@ -366,8 +399,12 @@ fn build(seed: u64, changed_source: bool) -> Pipeline {
         observation_id: Some("obs-transport-negotiated".into()),
         observation_kind: Some(CryptoUseKind::NegotiatedProtocol),
     });
-    edges.push(edge("edge-gateway", "use-transport-negotiated",
-        GraphRelation::ExposesUse, "ev-transport"));
+    edges.push(edge(
+        "edge-gateway",
+        "use-transport-negotiated",
+        GraphRelation::ExposesUse,
+        "ev-transport",
+    ));
     for (id, kind, ev) in [
         ("cert-chain", GraphNodeKind::Certificate, "ev-pki"),
         ("root-ca", GraphNodeKind::TrustAnchor, "ev-pki"),
@@ -379,17 +416,62 @@ fn build(seed: u64, changed_source: bool) -> Pipeline {
         nodes.push(node(id, kind, ev));
     }
     for (from, to, relation, ev) in [
-        ("pki-service", "cert-chain", GraphRelation::UsesCertificate, "ev-pki"),
+        (
+            "pki-service",
+            "cert-chain",
+            GraphRelation::UsesCertificate,
+            "ev-pki",
+        ),
         ("cert-chain", "root-ca", GraphRelation::IssuedBy, "ev-pki"),
         ("cloud-kms", "hsm-device", GraphRelation::UsesHsm, "ev-kms"),
-        ("hsm-device", "key-reference", GraphRelation::HoldsKey, "ev-kms"),
-        ("key-reference", "protected-data", GraphRelation::ProtectsData, "ev-kms"),
-        ("hsm-device", "external-supplier", GraphRelation::SuppliedBy, "ev-vendor"),
-        ("edge-gateway", "cloud-kms", GraphRelation::DependsOn, "ev-transport"),
-        ("cloud-kms", "edge-gateway", GraphRelation::DependsOn, "ev-kms"),
-        ("pki-service", "edge-gateway", GraphRelation::DependsOn, "ev-pki"),
-        ("release-signer", "cloud-kms", GraphRelation::DependsOn, "ev-codesign"),
-        ("vendor-connector", "pki-service", GraphRelation::DependsOn, "ev-vendor"),
+        (
+            "hsm-device",
+            "key-reference",
+            GraphRelation::HoldsKey,
+            "ev-kms",
+        ),
+        (
+            "key-reference",
+            "protected-data",
+            GraphRelation::ProtectsData,
+            "ev-kms",
+        ),
+        (
+            "hsm-device",
+            "external-supplier",
+            GraphRelation::SuppliedBy,
+            "ev-vendor",
+        ),
+        (
+            "edge-gateway",
+            "cloud-kms",
+            GraphRelation::DependsOn,
+            "ev-transport",
+        ),
+        (
+            "cloud-kms",
+            "edge-gateway",
+            GraphRelation::DependsOn,
+            "ev-kms",
+        ),
+        (
+            "pki-service",
+            "edge-gateway",
+            GraphRelation::DependsOn,
+            "ev-pki",
+        ),
+        (
+            "release-signer",
+            "cloud-kms",
+            GraphRelation::DependsOn,
+            "ev-codesign",
+        ),
+        (
+            "vendor-connector",
+            "pki-service",
+            GraphRelation::DependsOn,
+            "ev-vendor",
+        ),
     ] {
         edges.push(edge(from, to, relation, ev));
     }
@@ -426,33 +508,60 @@ fn build(seed: u64, changed_source: bool) -> Pipeline {
         edges: &edges,
     };
     let projected = NeutralInventoryAdapter::project(&input, raw.digest, &limits, NOW).unwrap();
-    let source = NeutralInventoryAdapter::import_pinned(
-        &input, projected.pins(), &limits, NOW
-    ).unwrap();
+    let source =
+        NeutralInventoryAdapter::import_pinned(&input, projected.pins(), &limits, NOW).unwrap();
     let topology = DependencyAnalysis::analyze(source.graph(), &limits).unwrap();
     let risk = RiskAnalysis::analyze(
-        source.inventory(), source.graph(), &topology, &[], &[], None, &limits
-    ).unwrap();
+        source.inventory(),
+        source.graph(),
+        &topology,
+        &[],
+        &[],
+        None,
+        &limits,
+    )
+    .unwrap();
     let target = target(&limits);
     let policy = NeutralPolicyReview::new(policy_input(&target), &target, &limits).unwrap();
     let left = vendor_catalog("client-vendor", "gateway-runtime", &limits);
     let right = vendor_catalog("kms-vendor", "kms-runtime", &limits);
     let compatibility = CompatibilityAnalyzer::analyze(
         &peer_request(source.graph(), &target, &left, &right),
-        source.graph(), &target, &left, &right, NOW, &limits
-    ).unwrap();
+        source.graph(),
+        &target,
+        &left,
+        &right,
+        NOW,
+        &limits,
+    )
+    .unwrap();
     let input_bindings = RemediationAnalyzer::input_bindings(
-        source.inventory(), source.graph(), &topology, &risk, &target, NOW, &limits
-    ).unwrap();
+        source.inventory(),
+        source.graph(),
+        &topology,
+        &risk,
+        &target,
+        NOW,
+        &limits,
+    )
+    .unwrap();
     let remediation = RemediationAnalyzer::analyze(
-        source.inventory(), source.graph(), &topology, &risk, &target,
-        &[&compatibility], input_bindings, &limits
-    ).unwrap();
-    let wave_bindings = WavePlanner::input_bindings(
-        &topology, &remediation, &target, &limits
-    ).unwrap();
+        source.inventory(),
+        source.graph(),
+        &topology,
+        &risk,
+        &target,
+        &[&compatibility],
+        input_bindings,
+        &limits,
+    )
+    .unwrap();
+    let wave_bindings =
+        WavePlanner::input_bindings(&topology, &remediation, &target, &limits).unwrap();
     let wave = WavePlanner::plan(
-        &topology, &remediation, &target,
+        &topology,
+        &remediation,
+        &target,
         &WavePlanRequest {
             schema_version: WAVE_PLAN_VERSION,
             capacity_systems_per_wave: 3,
@@ -461,23 +570,46 @@ fn build(seed: u64, changed_source: bool) -> Pipeline {
             submitted_for_review_units: vec![],
         },
         &limits,
-    ).unwrap();
+    )
+    .unwrap();
     let catalogs = [&left, &right];
     let plan_pins = MigrationPlanner::input_pins(
-        &topology, &remediation, &wave, &target, &catalogs, None, &limits
-    ).unwrap();
+        &topology,
+        &remediation,
+        &wave,
+        &target,
+        &catalogs,
+        None,
+        &limits,
+    )
+    .unwrap();
     let plan = MigrationPlanner::build(
-        &topology, &remediation, &wave, &target, &catalogs, None,
+        &topology,
+        &remediation,
+        &wave,
+        &target,
+        &catalogs,
+        None,
         &MigrationPlanRequest {
             schema_version: MIGRATION_PLAN_VERSION,
             expected_pins: plan_pins,
             exceptions: vec![],
         },
         &limits,
-    ).unwrap();
+    )
+    .unwrap();
     Pipeline {
-        source, topology, risk, target, left, right, compatibility,
-        remediation, wave, plan, policy,
+        source,
+        topology,
+        risk,
+        target,
+        left,
+        right,
+        compatibility,
+        remediation,
+        wave,
+        plan,
+        policy,
     }
 }
 
@@ -490,8 +622,14 @@ impl Pipeline {
             ("inventory", self.source.pins().inventory_digest),
             ("graph", self.source.pins().graph_digest),
             ("handoff", self.source.pins().handoff_digest),
-            ("risk", RemediationAnalyzer::risk_digest(&self.risk, &limits).unwrap()),
-            ("topology", RemediationAnalyzer::topology_digest(&self.topology, &limits).unwrap()),
+            (
+                "risk",
+                RemediationAnalyzer::risk_digest(&self.risk, &limits).unwrap(),
+            ),
+            (
+                "topology",
+                RemediationAnalyzer::topology_digest(&self.topology, &limits).unwrap(),
+            ),
             ("target", self.target.digest()),
             ("policy", self.policy.digest()),
             ("left-catalog", self.left.digest()),
@@ -501,9 +639,8 @@ impl Pipeline {
             ("wave", self.wave.digest()),
             ("plan", self.plan.digest()),
         ];
-        let mut output = format!(
-            "CSHIFT_E2_FROZEN_V1\nscope={TENANT}\nevaluation_utc={NOW}\nscenarios=5\n"
-        );
+        let mut output =
+            format!("CSHIFT_E2_FROZEN_V1\nscope={TENANT}\nevaluation_utc={NOW}\nscenarios=5\n");
         for (name, digest) in sources {
             writeln!(&mut output, "{name}={}", digest.as_identifier()).unwrap();
         }
@@ -511,7 +648,12 @@ impl Pipeline {
         writeln!(&mut output, "peer={:?}", self.compatibility.status()).unwrap();
         writeln!(&mut output, "units={}", self.topology.units().len()).unwrap();
         writeln!(&mut output, "waves={}", self.wave.waves().len()).unwrap();
-        writeln!(&mut output, "blockers={}", self.remediation.blockers().len()).unwrap();
+        writeln!(
+            &mut output,
+            "blockers={}",
+            self.remediation.blockers().len()
+        )
+        .unwrap();
         writeln!(&mut output, "residual={}", self.plan.residual_risks().len()).unwrap();
         output
     }
@@ -522,27 +664,54 @@ fn complete_enterprise_pipeline_matches_reviewed_full_phase_golden() {
     let pipeline = build(0, false);
     assert_eq!(pipeline.source.inventory().snapshot().observations.len(), 6);
     assert_eq!(pipeline.source.graph().nodes().len(), 18);
-    assert_eq!(pipeline.topology.units().len(), 4, "edge/kms cycle must remain atomic");
-    assert!(pipeline.topology.units().iter().any(|u| u.cyclic && u.system_ids.len() == 2));
+    assert_eq!(
+        pipeline.topology.units().len(),
+        4,
+        "edge/kms cycle must remain atomic"
+    );
+    assert!(
+        pipeline
+            .topology
+            .units()
+            .iter()
+            .any(|u| u.cyclic && u.system_ids.len() == 2)
+    );
     assert!(!pipeline.remediation.blockers().is_empty());
     assert!(!pipeline.plan.residual_risks().is_empty());
-    assert_ne!(pipeline.compatibility.status(), CompatibilityStatus::Compatible);
+    assert_ne!(
+        pipeline.compatibility.status(),
+        CompatibilityStatus::Compatible
+    );
     assert_eq!(
-        pipeline.policy.gate_for(&pipeline.target, KnownAlgorithm::MlKem1024.id()).unwrap(),
+        pipeline
+            .policy
+            .gate_for(&pipeline.target, KnownAlgorithm::MlKem1024.id())
+            .unwrap(),
         NeutralPolicyGate::Unverified
     );
     assert_eq!(
-        pipeline.policy.gate_for(&pipeline.target, KnownAlgorithm::MlKem768.id()).unwrap(),
+        pipeline
+            .policy
+            .gate_for(&pipeline.target, KnownAlgorithm::MlKem768.id())
+            .unwrap(),
         NeutralPolicyGate::Prohibited
     );
     assert!(pipeline.wave.readiness().iter().all(|r| {
-        matches!(r.status, UnitReadinessStatus::Blocked | UnitReadinessStatus::Unverified | UnitReadinessStatus::AwaitingExternalApproval | UnitReadinessStatus::EligibleForReview)
+        matches!(
+            r.status,
+            UnitReadinessStatus::Blocked
+                | UnitReadinessStatus::Unverified
+                | UnitReadinessStatus::AwaitingExternalApproval
+                | UnitReadinessStatus::EligibleForReview
+        )
     }));
     assert_eq!(pipeline.plan.pins().scope_id, TENANT);
     assert_eq!(pipeline.plan.pins().evaluated_at_unix_secs, NOW);
     assert_eq!(
-        pipeline.manifest().trim_end(), GOLDEN.trim_end(),
-        "canonical cross-phase golden changed: review fixture, expected digests and semantics; actual=\n{}", pipeline.manifest()
+        pipeline.manifest().trim_end(),
+        GOLDEN.trim_end(),
+        "canonical cross-phase golden changed: review fixture, expected digests and semantics; actual=\n{}",
+        pipeline.manifest()
     );
 }
 
@@ -555,9 +724,21 @@ fn seeded_permutations_preserve_full_phase_canonical_bytes() {
     for seed in 1..=48 {
         let run = build(seed, false);
         assert_eq!(run.manifest(), first.manifest(), "seed {seed}");
-        assert_eq!(run.plan.export(&Limits::default()).unwrap(), golden_plan, "seed {seed}");
-        assert_eq!(run.source.export(&Limits::default()).unwrap(), golden_source, "seed {seed}");
-        assert_eq!(run.policy.export(&Limits::default()).unwrap(), golden_policy, "seed {seed}");
+        assert_eq!(
+            run.plan.export(&Limits::default()).unwrap(),
+            golden_plan,
+            "seed {seed}"
+        );
+        assert_eq!(
+            run.source.export(&Limits::default()).unwrap(),
+            golden_source,
+            "seed {seed}"
+        );
+        assert_eq!(
+            run.policy.export(&Limits::default()).unwrap(),
+            golden_policy,
+            "seed {seed}"
+        );
     }
 }
 
@@ -567,7 +748,10 @@ fn source_mutation_rotates_pins_and_produces_typed_semantic_diff() {
     let changed = build(31, true);
     assert_ne!(old.source.pins(), changed.source.pins());
     assert_ne!(old.plan.digest(), changed.plan.digest());
-    let diff = old.plan.semantic_diff(&changed.plan, &Limits::default()).unwrap();
+    let diff = old
+        .plan
+        .semantic_diff(&changed.plan, &Limits::default())
+        .unwrap();
     assert!(diff.changes.contains(&PlanChangeKind::Inventory));
     assert!(diff.changes.contains(&PlanChangeKind::Graph));
     assert_eq!(old.target.digest(), changed.target.digest());
@@ -576,27 +760,48 @@ fn source_mutation_rotates_pins_and_produces_typed_semantic_diff() {
 #[test]
 fn bounded_planning_and_source_export_reject_smaller_consumer_budgets() {
     let p = build(0, false);
-    let mut limits = Limits { max_graph_nodes: 3, ..Limits::default() };
+    let mut limits = Limits {
+        max_graph_nodes: 3,
+        ..Limits::default()
+    };
     assert_eq!(
-        DependencyAnalysis::analyze(p.source.graph(), &limits).unwrap_err().code,
+        DependencyAnalysis::analyze(p.source.graph(), &limits)
+            .unwrap_err()
+            .code,
         DiagnosticCode::ResourceLimitExceeded
     );
-    limits = Limits { max_input_bytes: 32, ..Limits::default() };
+    limits = Limits {
+        max_input_bytes: 32,
+        ..Limits::default()
+    };
     assert_eq!(
         p.source.export(&limits).unwrap_err().code,
         DiagnosticCode::ResourceLimitExceeded
     );
-    limits = Limits { max_export_bytes: 32, ..Limits::default() };
+    limits = Limits {
+        max_export_bytes: 32,
+        ..Limits::default()
+    };
     assert_eq!(
         p.plan.export(&limits).unwrap_err().code,
         DiagnosticCode::ResourceLimitExceeded
     );
-    limits = Limits { max_planner_candidates: 2, ..Limits::default() };
+    limits = Limits {
+        max_planner_candidates: 2,
+        ..Limits::default()
+    };
     assert_eq!(
         RiskAnalysis::analyze(
-            p.source.inventory(), p.source.graph(), &p.topology,
-            &[], &[], None, &limits
-        ).unwrap_err().code,
+            p.source.inventory(),
+            p.source.graph(),
+            &p.topology,
+            &[],
+            &[],
+            None,
+            &limits
+        )
+        .unwrap_err()
+        .code,
         DiagnosticCode::ResourceLimitExceeded
     );
 }
@@ -607,40 +812,94 @@ fn invalid_and_untrusted_evidence_does_not_upgrade_authority() {
     let limits = Limits::default();
     let req = peer_request(p.source.graph(), &p.target, &p.left, &p.right);
     let baseline = CompatibilityAnalyzer::analyze(
-        &req, p.source.graph(), &p.target, &p.left, &p.right, NOW, &limits
-    ).unwrap();
+        &req,
+        p.source.graph(),
+        &p.target,
+        &p.left,
+        &p.right,
+        NOW,
+        &limits,
+    )
+    .unwrap();
     assert_eq!(baseline.status(), CompatibilityStatus::Unknown);
-    assert!(baseline.findings().iter().any(|f| f.code == CompatibilityCode::NegotiationMissing));
+    assert!(
+        baseline
+            .findings()
+            .iter()
+            .any(|f| f.code == CompatibilityCode::NegotiationMissing)
+    );
     let mut downgrade = req.clone();
     downgrade.classical_fallback = true;
     let denied = CompatibilityAnalyzer::analyze(
-        &downgrade, p.source.graph(), &p.target, &p.left, &p.right, NOW, &limits
-    ).unwrap();
+        &downgrade,
+        p.source.graph(),
+        &p.target,
+        &p.left,
+        &p.right,
+        NOW,
+        &limits,
+    )
+    .unwrap();
     assert_eq!(denied.status(), CompatibilityStatus::Incompatible);
-    assert!(denied.findings().iter().any(|f| f.code == CompatibilityCode::DowngradeRejected));
+    assert!(
+        denied
+            .findings()
+            .iter()
+            .any(|f| f.code == CompatibilityCode::DowngradeRejected)
+    );
     let mut hybrid = req.clone();
     hybrid.hybrid = Some(HybridSelection {
         companion_algorithm_id: "ECDH-P256".into(),
         combiner_reference: "unreviewed-combiner".into(),
     });
     let denied = CompatibilityAnalyzer::analyze(
-        &hybrid, p.source.graph(), &p.target, &p.left, &p.right, NOW, &limits
-    ).unwrap();
+        &hybrid,
+        p.source.graph(),
+        &p.target,
+        &p.left,
+        &p.right,
+        NOW,
+        &limits,
+    )
+    .unwrap();
     assert_eq!(denied.status(), CompatibilityStatus::Incompatible);
-    assert!(denied.findings().iter().any(|f| f.code == CompatibilityCode::HybridNotApproved));
+    assert!(
+        denied
+            .findings()
+            .iter()
+            .any(|f| f.code == CompatibilityCode::HybridNotApproved)
+    );
     let mut cross_tenant = req.clone();
     cross_tenant.scope_id = "attacker-tenant".into();
     assert_eq!(
         CompatibilityAnalyzer::analyze(
-            &cross_tenant, p.source.graph(), &p.target, &p.left, &p.right, NOW, &limits
-        ).unwrap_err().code, DiagnosticCode::InvalidReference
+            &cross_tenant,
+            p.source.graph(),
+            &p.target,
+            &p.left,
+            &p.right,
+            NOW,
+            &limits
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::InvalidReference
     );
     let mut replay = req;
     replay.expected_target_digest = SnapshotDigest::from_bytes([99; 32]);
     assert_eq!(
         CompatibilityAnalyzer::analyze(
-            &replay, p.source.graph(), &p.target, &p.left, &p.right, NOW, &limits
-        ).unwrap_err().code, DiagnosticCode::IntegrityMismatch
+            &replay,
+            p.source.graph(),
+            &p.target,
+            &p.left,
+            &p.right,
+            NOW,
+            &limits
+        )
+        .unwrap_err()
+        .code,
+        DiagnosticCode::IntegrityMismatch
     );
 }
 
@@ -666,45 +925,61 @@ fn schema_digest_expiry_and_policy_claim_tampering_fail_closed() {
         critical_profiles: &profiles,
     };
     assert_eq!(
-        ValidatedInventorySnapshot::import_verified(
-            &env, raw.digest, &limits, NOW
-        ).unwrap_err().code, DiagnosticCode::IntegrityMismatch
+        ValidatedInventorySnapshot::import_verified(&env, raw.digest, &limits, NOW)
+            .unwrap_err()
+            .code,
+        DiagnosticCode::IntegrityMismatch
     );
     env.version = SchemaVersion { major: 1, minor: 1 };
-    assert_eq!(env.preflight(&limits, NOW).unwrap_err().code,
-        DiagnosticCode::UnsupportedSchemaVersion);
+    assert_eq!(
+        env.preflight(&limits, NOW).unwrap_err().code,
+        DiagnosticCode::UnsupportedSchemaVersion
+    );
     env.version = SchemaVersion { major: 2, minor: 0 };
-    assert_eq!(env.preflight(&limits, NOW).unwrap_err().code,
-        DiagnosticCode::UnsupportedSchemaVersion);
+    assert_eq!(
+        env.preflight(&limits, NOW).unwrap_err().code,
+        DiagnosticCode::UnsupportedSchemaVersion
+    );
     env.version = SchemaVersion::V1_0;
-    env.critical_profiles = &[CriticalProfileReference {
+    let expired = [CriticalProfileReference {
         expires_at_unix_secs: Some(NOW),
         ..profiles[0]
     }];
-    assert_eq!(env.preflight(&limits, NOW).unwrap_err().code,
-        DiagnosticCode::StaleCriticalProfile);
+    env.critical_profiles = &expired;
+    assert_eq!(
+        env.preflight(&limits, NOW).unwrap_err().code,
+        DiagnosticCode::StaleCriticalProfile
+    );
     let mut policy = policy_input(&p.target);
     policy.decisions[1].outcome = NeutralPolicyOutcome::PermitClaimed;
     assert_eq!(
-        NeutralPolicyReview::new(policy, &p.target, &limits).unwrap_err().code,
+        NeutralPolicyReview::new(policy, &p.target, &limits)
+            .unwrap_err()
+            .code,
         DiagnosticCode::InvalidStateTransition
     );
     let mut policy = policy_input(&p.target);
     policy.target_digest = SnapshotDigest::from_bytes([44; 32]);
     assert_eq!(
-        NeutralPolicyReview::new(policy, &p.target, &limits).unwrap_err().code,
+        NeutralPolicyReview::new(policy, &p.target, &limits)
+            .unwrap_err()
+            .code,
         DiagnosticCode::IntegrityMismatch
     );
     let mut policy = policy_input(&p.target);
     policy.expires_at_unix_secs = NOW;
     assert_eq!(
-        NeutralPolicyReview::new(policy, &p.target, &limits).unwrap_err().code,
+        NeutralPolicyReview::new(policy, &p.target, &limits)
+            .unwrap_err()
+            .code,
         DiagnosticCode::StaleCriticalProfile
     );
     let mut policy = policy_input(&p.target);
     policy.schema_version += 1;
     assert_eq!(
-        NeutralPolicyReview::new(policy, &p.target, &limits).unwrap_err().code,
+        NeutralPolicyReview::new(policy, &p.target, &limits)
+            .unwrap_err()
+            .code,
         DiagnosticCode::UnsupportedSchemaVersion
     );
 }
@@ -726,18 +1001,34 @@ fn deterministic_bounded_parser_mutations_never_treat_framing_as_schema_validati
             source_id: "mutator-v1",
             critical_profiles: &[],
         };
-        let result = env.preflight(&limits, NOW).unwrap()
+        let result = env
+            .preflight(&limits, NOW)
+            .unwrap()
             .preflight_json_nesting(&limits);
-        assert_eq!(result.is_ok(), depth <= limits.max_parse_depth, "case {iteration}");
+        assert_eq!(
+            result.is_ok(),
+            depth <= limits.max_parse_depth,
+            "case {iteration}"
+        );
         if result.is_ok() {
             // Balanced brackets are not a valid Cryptoshift CSHIFT01 snapshot.
             let fake_hash: [u8; 32] = Sha256::digest(raw.as_bytes()).into();
-            assert!(ValidatedInventorySnapshot::import_verified(
-                &env, SnapshotDigest::from_bytes(fake_hash), &limits, NOW
-            ).is_err());
+            assert!(
+                ValidatedInventorySnapshot::import_verified(
+                    &env,
+                    SnapshotDigest::from_bytes(fake_hash),
+                    &limits,
+                    NOW
+                )
+                .is_err()
+            );
         }
     }
-    for hostile in [b"{]".as_slice(), b"[[}".as_slice(), b"{\"open\": [}".as_slice()] {
+    for hostile in [
+        b"{]".as_slice(),
+        b"[[}".as_slice(),
+        b"{\"open\": [}".as_slice(),
+    ] {
         let env = VersionedEnvelope {
             schema: SchemaKind::InventorySnapshot,
             version: SchemaVersion::V1_0,
@@ -746,8 +1037,11 @@ fn deterministic_bounded_parser_mutations_never_treat_framing_as_schema_validati
             critical_profiles: &[],
         };
         assert_eq!(
-            env.preflight(&limits, NOW).unwrap().preflight_json_nesting(&limits)
-                .unwrap_err().code,
+            env.preflight(&limits, NOW)
+                .unwrap()
+                .preflight_json_nesting(&limits)
+                .unwrap_err()
+                .code,
             DiagnosticCode::MalformedStructure
         );
     }
