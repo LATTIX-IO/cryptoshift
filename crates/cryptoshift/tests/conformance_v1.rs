@@ -771,7 +771,7 @@ fn bounded_planning_and_source_export_reject_smaller_consumer_budgets() {
         DiagnosticCode::ResourceLimitExceeded
     );
     limits = Limits {
-        max_input_bytes: 32,
+        max_export_bytes: 32,
         ..Limits::default()
     };
     assert_eq!(
