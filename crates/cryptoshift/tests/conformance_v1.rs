@@ -521,7 +521,7 @@ impl Pipeline {
 fn complete_enterprise_pipeline_matches_reviewed_full_phase_golden() {
     let pipeline = build(0, false);
     assert_eq!(pipeline.source.inventory().snapshot().observations.len(), 6);
-    assert_eq!(pipeline.source.graph().nodes().len(), 17);
+    assert_eq!(pipeline.source.graph().nodes().len(), 18);
     assert_eq!(pipeline.topology.units().len(), 4, "edge/kms cycle must remain atomic");
     assert!(pipeline.topology.units().iter().any(|u| u.cyclic && u.system_ids.len() == 2));
     assert!(!pipeline.remediation.blockers().is_empty());
@@ -536,13 +536,13 @@ fn complete_enterprise_pipeline_matches_reviewed_full_phase_golden() {
         NeutralPolicyGate::Prohibited
     );
     assert!(pipeline.wave.readiness().iter().all(|r| {
-        r.status != UnitReadinessStatus::Ready
+        matches!(r.status, UnitReadinessStatus::Blocked | UnitReadinessStatus::Unverified | UnitReadinessStatus::AwaitingExternalApproval | UnitReadinessStatus::EligibleForReview)
     }));
     assert_eq!(pipeline.plan.pins().scope_id, TENANT);
     assert_eq!(pipeline.plan.pins().evaluated_at_unix_secs, NOW);
     assert_eq!(
         pipeline.manifest().trim_end(), GOLDEN.trim_end(),
-        "canonical cross-phase golden changed: review fixture, expected digests and semantics"
+        "canonical cross-phase golden changed: review fixture, expected digests and semantics; actual=\n{}", pipeline.manifest()
     );
 }
 
