@@ -185,7 +185,12 @@ jobs:
         shell: pwsh
         run: |
           cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo check --workspace --all-targets --all-features --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test -p cryptoshift --test conformance_v1 --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo run --frozen --manifest-path acceptance/neutral-consumer/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
