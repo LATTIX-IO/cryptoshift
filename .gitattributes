@@ -6,3 +6,5 @@
 *.md text eol=lf
 *.json text eol=lf
 *.lock text eol=lf
+# Cryptoshift's v1 source and golden digests bind LF bytes on every OS.
+tests/conformance/** text eol=lf
