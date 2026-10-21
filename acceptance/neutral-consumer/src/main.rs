@@ -175,6 +175,91 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "neutral policy gate: {:?}",
         review.gate_for(&t, "ML-KEM-1024")?
     );
+    // Independent, detached Cargo consumer of the full all-or-nothing
+    // orchestration API. Fixture pins below are self-generated and therefore
+    // *not* independent publisher authentication.
+    let checked = AnalysisRunner::analyze(
+        &AnalysisRequest {
+            inventory: new.inventory(),
+            graph: new.graph(),
+            target: &t,
+            expected_inventory_digest: new.pins().inventory_digest,
+            expected_graph_digest: new.pins().graph_digest,
+            expected_target_digest: t.digest(),
+            compatibilities: &[],
+            capability_catalogs: &[],
+            quantum: &[],
+            context: &[],
+            scoring: None,
+            evaluated_at_unix_secs: NOW,
+            capacity_systems_per_wave: 1,
+            max_waves: 1,
+            submitted_for_review_units: &[],
+            exceptions: &[],
+            include_metrics: true,
+        },
+        &limit,
+    );
+    assert_ne!(checked.outcome(), AnalysisOutcome::Failed);
+    assert!(checked.plan().is_some());
+    assert!(checked.metrics().is_some());
+    assert!(checked.failure().is_none());
+    let expected = checked.plan().unwrap().digest();
+
+    let repeated = AnalysisRunner::analyze(
+        &AnalysisRequest {
+            inventory: new.inventory(),
+            graph: new.graph(),
+            target: &t,
+            expected_inventory_digest: new.pins().inventory_digest,
+            expected_graph_digest: new.pins().graph_digest,
+            expected_target_digest: t.digest(),
+            compatibilities: &[],
+            capability_catalogs: &[],
+            quantum: &[],
+            context: &[],
+            scoring: None,
+            evaluated_at_unix_secs: NOW,
+            capacity_systems_per_wave: 1,
+            max_waves: 1,
+            submitted_for_review_units: &[],
+            exceptions: &[],
+            include_metrics: false,
+        },
+        &limit,
+    );
+    assert_eq!(repeated.plan().unwrap().digest(), expected);
+    assert!(repeated.metrics().is_none());
+
+    // A forged graph pin must fail atomically with no plan or metrics.
+    let denied = AnalysisRunner::analyze(
+        &AnalysisRequest {
+            inventory: new.inventory(),
+            graph: new.graph(),
+            target: &t,
+            expected_inventory_digest: new.pins().inventory_digest,
+            expected_graph_digest: SnapshotDigest::from_bytes([0; 32]),
+            expected_target_digest: t.digest(),
+            compatibilities: &[],
+            capability_catalogs: &[],
+            quantum: &[],
+            context: &[],
+            scoring: None,
+            evaluated_at_unix_secs: NOW,
+            capacity_systems_per_wave: 1,
+            max_waves: 1,
+            submitted_for_review_units: &[],
+            exceptions: &[],
+            include_metrics: true,
+        },
+        &limit,
+    );
+    assert_eq!(denied.outcome(), AnalysisOutcome::Failed);
+    assert!(denied.plan().is_none());
+    assert!(denied.metrics().is_none());
+    assert_eq!(denied.failure().unwrap().code, DiagnosticCode::IntegrityMismatch);
+    assert_eq!(denied.findings()[0].phase, AnalysisPhase::Admission);
+    println!("atomic analysis: {:?} (unverified, not authorized)", checked.outcome());
     println!(
         "No authentication, negotiated peer proof, migration approval, or publishing occurred."
     );
