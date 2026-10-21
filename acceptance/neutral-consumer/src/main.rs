@@ -263,7 +263,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         DiagnosticCode::IntegrityMismatch
     );
     assert_eq!(denied.findings()[0].phase, AnalysisPhase::Admission);
-    println!("atomic analysis: {:?} (unverified, not authorized)", checked.outcome());
+    println!(
+        "atomic analysis: {:?} (unverified, not authorized)",
+        checked.outcome()
+    );
     println!(
         "No authentication, negotiated peer proof, migration approval, or publishing occurred."
     );
