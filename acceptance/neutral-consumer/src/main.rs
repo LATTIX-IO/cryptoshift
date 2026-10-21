@@ -175,6 +175,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "neutral policy gate: {:?}",
         review.gate_for(&t, "ML-KEM-1024")?
     );
+    let limit = Limits::default();
     // Independent, detached Cargo consumer of the full all-or-nothing
     // orchestration API. Fixture pins below are self-generated and therefore
     // *not* independent publisher authentication.
