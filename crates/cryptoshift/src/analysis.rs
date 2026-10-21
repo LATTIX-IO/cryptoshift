@@ -15,6 +15,10 @@ use crate::{
 pub const ANALYSIS_RESULT_VERSION: u16 = 1;
 
 /// End-to-end outcome. Even `Complete` never means deployment authorization.
+///
+/// In the v1 source contract, the migration planner retains unverified
+/// capability facets in every successful plan. Complete and Warnings are
+/// reserved future states, not currently emitted by AnalysisRunner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AnalysisOutcome {
     /// All modeled evidence is complete for *external review*, not execution.
