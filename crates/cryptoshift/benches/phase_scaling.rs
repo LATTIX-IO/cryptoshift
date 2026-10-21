@@ -369,7 +369,8 @@ fn measure(
     ))
 }
 
-fn run(smoke: bool) -> Result<(), Box<dyn std::error::Error>> {
+/// Exercise all three deterministic profiles; measured durations never gate correctness.
+pub fn run(smoke: bool) -> Result<(), Box<dyn std::error::Error>> {
     let limits = Limits::default();
     let iterations: u32 = if smoke { 1 } else { 10 };
     for (label, systems) in SIZES {
