@@ -35,6 +35,10 @@ The `--smoke` mode executes each profile in original and reversed input order an
 
 For a locally collected performance baseline, record the **exact** commit, OS/kernel, CPU architecture and model, memory, power mode, Rust compiler/toolchain, Cargo version, release profile, command line, number of repetitions, warm/cold cache, elapsed wall-clock samples (p50/p95 if enough repetitions), and all reported plan/phase digests. Cross-host timings are not directly comparable without that metadata. Do not commit unstable timings as immutable golden acceptance thresholds.
 
+## Frozen semantic baseline
+
+The source-controlled `tests/perf/v1/identity.golden` is pinned to the exact reviewed output of [Linux CI #39661071220](https://github.com/LATTIX-IO/cryptoshift/actions/runs/39661071220) at commit `769d4b81c8564ed58df6cf56a8dd7466b6c872d3`. It contains precisely one canonical identity record per scale with graph, risk, compatibility, remediation, wave and immutable plan digests. All CI and manually invoked benchmark runs compare every identity record byte-for-byte to this baseline, and also verify input-order permutation equality. Durations are deliberately excluded from the golden. Any drift requires source evidence, explicit review and a separate qualified update; self-rewriting a golden during a test is prohibited. `tests/perf/**` uses LF-pinned Git attributes for Windows parity.
+
 ## Test-to-requirement mapping
 
 | Requirement | Evidence |
