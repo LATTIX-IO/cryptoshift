@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 const NOW: i64 = 1_800_000_000;
 const SCOPE: &str = "benchmark-synthetic";
+const SEMANTIC_GOLDEN: &str = include_str!("../../../tests/perf/v1/identity.golden");
 const SIZES: [(&str, usize); 3] = [("small", 8), ("standard", 24), ("large", 64)];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -375,6 +376,7 @@ fn measure(
 pub fn run(smoke: bool) -> Result<(), Box<dyn std::error::Error>> {
     let limits = Limits::default();
     let iterations: u32 = if smoke { 1 } else { 10 };
+    let mut semantic_lines = String::new();
     for (label, systems) in SIZES {
         let (baseline, first) = measure(systems, false, &limits)?;
         let (reversed, _) = measure(systems, true, &limits)?;
@@ -404,7 +406,7 @@ pub fn run(smoke: bool) -> Result<(), Box<dyn std::error::Error>> {
             black_box(&again);
             timings.add(sample);
         }
-        println!(
+        let identity_line = format!(
             "scaling:v1 profile={label} nodes={systems} units={} waves={} assessment={:?} graph={} risk={} compatibility={} remediation={} wave={} plan={}",
             baseline.units,
             baseline.waves,
@@ -416,7 +418,18 @@ pub fn run(smoke: bool) -> Result<(), Box<dyn std::error::Error>> {
             baseline.wave,
             baseline.plan,
         );
+        println!("{identity_line}");
+        semantic_lines.push_str(&identity_line);
+        semantic_lines.push('\n');
         timings.print_average(label, systems, iterations);
+    }
+    // This file is reviewed v1 regression evidence, not a live-run expectation.
+    // Both optimized and test profiles must preserve these exact phase identities.
+    if semantic_lines != SEMANTIC_GOLDEN {
+        return Err(format!(
+            "frozen phase semantics changed; independently review any expected update:\n{semantic_lines}"
+        )
+        .into());
     }
     println!("scaling:v1 PASS; synthetic hashes are identities, not authorization");
     Ok(())
