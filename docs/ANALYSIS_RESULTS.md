@@ -16,6 +16,8 @@ Cryptoshift now exposes an **offline, all-or-nothing** analysis entry point. It 
 | `Infeasible` | A hard policy/contradiction blocks the draft; not deployable |
 | `Failed` | Validation or computation rejected the request; **no plan is returned** |
 
+**Current v1 limitation:** The existing immutable plan engine marks otherwise valid runs `Partial` whenever capability evidence is missing or vendor-sourced. These conditions cover all currently constructible inputs, so `Complete`, `Warnings` and `ExternalReviewRequired` remain reserved classifications, not reachable end-to-end results in v1. The API must never promote unresolved evidence to a higher state merely to return a reserved outcome. Only `Partial`, `Infeasible` and `Failed` are currently reachable.
+
 A `Failed` result has `plan() == None`, `metrics() == None`, an immutable source-safe `Diagnostic` at `failure()`, and one `ValidationFailed` finding with the stage that failed. No intermediate topology, risk result, candidate waves or plan is exposed. Successful results contain one immutable plan and at most one deterministic status finding. The `findings()` codes are static identifiers; text and log output never copy user-provided source values.
 
 `AnalysisRequest` does not infer external trust. Every required digest must come from the host's independently verified channel; the library's SHA-256 identifiers only bind content. The caller supplies an explicit UTC evaluation instant. Existing phase validators recheck scope, schema, freshness, compatibility and all resource limits.
