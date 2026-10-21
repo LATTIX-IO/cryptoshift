@@ -201,7 +201,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         &limit,
     );
-    assert_ne!(checked.outcome(), AnalysisOutcome::Failed);
+    // Unverified vendor evidence cannot reach reserved Complete/Warnings states.
+    assert_eq!(checked.outcome(), AnalysisOutcome::Partial);
     assert!(checked.plan().is_some());
     assert!(checked.metrics().is_some());
     assert!(checked.failure().is_none());
