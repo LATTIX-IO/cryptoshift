@@ -172,11 +172,7 @@ fn target(limits: &Limits) -> Result<TargetProfile, Diagnostic> {
     )
 }
 
-fn catalog(
-    name: &str,
-    runtime: &str,
-    limits: &Limits,
-) -> Result<CapabilityCatalog, Diagnostic> {
+fn catalog(name: &str, runtime: &str, limits: &Limits) -> Result<CapabilityCatalog, Diagnostic> {
     CapabilityCatalog::new(
         CapabilityCatalogDraft {
             schema_version: CAPABILITY_CATALOG_VERSION,
@@ -318,7 +314,13 @@ fn measure(
     let start = Instant::now();
     let catalogs = [&left, &right];
     let pins = MigrationPlanner::input_pins(
-        &topology, &remediation, &wave, &desired, &catalogs, None, limits,
+        &topology,
+        &remediation,
+        &wave,
+        &desired,
+        &catalogs,
+        None,
+        limits,
     )?;
     let plan = MigrationPlanner::build(
         &topology,
@@ -377,7 +379,9 @@ pub fn run(smoke: bool) -> Result<(), Box<dyn std::error::Error>> {
         let (baseline, first) = measure(systems, false, &limits)?;
         let (reversed, _) = measure(systems, true, &limits)?;
         if baseline != reversed {
-            return Err(format!("{label}: semantic identity differs after input permutation").into());
+            return Err(
+                format!("{label}: semantic identity differs after input permutation").into(),
+            );
         }
         // Negative-budget smoke: an already accepted graph must not be
         // processed by a consumer with a smaller node budget.
