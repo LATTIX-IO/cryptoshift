@@ -258,7 +258,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(denied.outcome(), AnalysisOutcome::Failed);
     assert!(denied.plan().is_none());
     assert!(denied.metrics().is_none());
-    assert_eq!(denied.failure().unwrap().code, DiagnosticCode::IntegrityMismatch);
+    assert_eq!(
+        denied.failure().unwrap().code,
+        DiagnosticCode::IntegrityMismatch
+    );
     assert_eq!(denied.findings()[0].phase, AnalysisPhase::Admission);
     println!("atomic analysis: {:?} (unverified, not authorized)", checked.outcome());
     println!(
