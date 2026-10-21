@@ -43,6 +43,15 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Test
         run: cargo test --workspace --all-features --locked
+      - name: Deterministic scaling semantic smoke (not a timing gate)
+        shell: bash
+        run: |
+          output=$(cargo bench -p cryptoshift --bench phase_scaling -- --smoke)
+          printf '%s\n' "$output"
+          grep -Fq 'scaling:v1 profile=small nodes=8 units=2' <<< "$output"
+          grep -Fq 'scaling:v1 profile=standard nodes=24 units=6' <<< "$output"
+          grep -Fq 'scaling:v1 profile=large nodes=64 units=16' <<< "$output"
+          grep -Fq 'scaling:v1 PASS' <<< "$output"
       - name: Standalone offline peer compatibility acceptance
         shell: bash
         run: |
