@@ -31,6 +31,8 @@ proofs or authorize migrations. No public crates.io release is authorized.
 
 See the [peer compatibility contract](docs/PEER_COMPATIBILITY.md) and [remediation action contract](docs/REMEDIATION_ACTIONS.md) for evidence and authorization limitations. See the [candidate wave planning contract](docs/WAVE_PLANNING.md) for SCC capacity and review-only states. The [immutable migration plan contract](docs/MIGRATION_PLAN.md) describes source digests, risk and exception authority limits. The [neutral adapter contract](docs/NEUTRAL_ADAPTERS.md) defines the bounded Cryptoshift-owned fixture boundary and explicitly does not claim a released upstream Cryptomap/Cryptopolicy wire integration.
 
+Reproducible [phase scaling and benchmark methodology](docs/PERFORMANCE.md) is available for synthetic graph, SCC, risk, peer compatibility, remediation, advisory wave and plan workloads. The benchmark never approves cryptographic migrations and gates semantic identity rather than wall-clock performance.
+
 ## Development
 
     cargo fmt --all -- --check
