@@ -6,3 +6,4 @@
 *.md text eol=lf
 *.json text eol=lf
 *.lock text eol=lf
+tests/perf/** text eol=lf
