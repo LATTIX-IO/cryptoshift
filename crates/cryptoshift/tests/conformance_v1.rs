@@ -703,11 +703,9 @@ fn complete_enterprise_pipeline_matches_reviewed_full_phase_golden() {
             || r.status == UnitReadinessStatus::Unverified
     }));
     // No unit was submitted for review, so no review/approval state is implied.
-    assert!(
-        readiness
-            .iter()
-            .all(|r| r.status != UnitReadinessStatus::AwaitingExternalApproval)
-    );
+    assert!(readiness
+        .iter()
+        .all(|r| r.status != UnitReadinessStatus::AwaitingExternalApproval));
     assert_eq!(pipeline.plan.pins().scope_id, TENANT);
     assert_eq!(pipeline.plan.pins().evaluated_at_unix_secs, NOW);
     assert_eq!(
