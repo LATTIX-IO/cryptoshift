@@ -4,6 +4,6 @@
 mod benchmark;
 
 #[test]
-fn bounded_scaling_profiles_replay() {
-    benchmark::run(true).expect("synthetic scaling contract must replay");
+fn bounded_scaling_profiles_replay() -> Result<(), Box<dyn std::error::Error>> {
+    benchmark::run(true)
 }
