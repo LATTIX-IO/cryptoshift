@@ -25,6 +25,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod analysis;
 mod capability;
 mod compatibility;
 mod diagnostic;
@@ -44,6 +45,11 @@ mod standards;
 mod target;
 mod topology;
 mod wave;
+
+pub use analysis::{
+    ANALYSIS_RESULT_VERSION, AnalysisFinding, AnalysisFindingCode, AnalysisMetrics,
+    AnalysisOutcome, AnalysisPhase, AnalysisRequest, AnalysisResult, AnalysisRunner,
+};
 
 pub use diagnostic::{Diagnostic, DiagnosticCode};
 pub use envelope::{
