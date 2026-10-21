@@ -3,12 +3,12 @@
 //! A complete *analysis* is not an approved migration. All inputs remain untrusted
 //! unless their supplied content pins were authenticated by the calling host.
 use crate::{
-    CapabilityCatalog, CompatibilityAnalysis, ContextAssessment, DependencyAnalysis,
-    Diagnostic, DiagnosticCode, EvidenceGraph, Limits, MIGRATION_PLAN_VERSION,
-    MigrationPlanDraft, MigrationPlanRequest, MigrationPlanner, PlanAssessmentState,
-    PlanExceptionRequest, QuantumAssessment, RemediationAnalyzer, ResourceKind,
-    RiskAnalysis, ScoreProfile, SnapshotDigest, TargetProfile, ValidatedInventorySnapshot,
-    WAVE_PLAN_VERSION, WavePlanRequest, WavePlanner,
+    CapabilityCatalog, CompatibilityAnalysis, ContextAssessment, DependencyAnalysis, Diagnostic,
+    DiagnosticCode, EvidenceGraph, Limits, MIGRATION_PLAN_VERSION, MigrationPlanDraft,
+    MigrationPlanRequest, MigrationPlanner, PlanAssessmentState, PlanExceptionRequest,
+    QuantumAssessment, RemediationAnalyzer, ResourceKind, RiskAnalysis, ScoreProfile,
+    SnapshotDigest, TargetProfile, ValidatedInventorySnapshot, WAVE_PLAN_VERSION, WavePlanRequest,
+    WavePlanner,
 };
 
 /// Public contract revision for the atomic analysis API.
@@ -205,9 +205,15 @@ impl AnalysisRunner {
             limits.check(ResourceKind::GraphNodes, request.graph.nodes().len())?;
             limits.check(ResourceKind::GraphEdges, request.graph.edges().len())?;
             limits.check(ResourceKind::EvidenceRecords, request.compatibilities.len())?;
-            limits.check(ResourceKind::ProfileReferences, request.capability_catalogs.len())?;
+            limits.check(
+                ResourceKind::ProfileReferences,
+                request.capability_catalogs.len(),
+            )?;
             limits.check(ResourceKind::ProfileReferences, request.exceptions.len())?;
-            limits.check(ResourceKind::GraphNodes, request.submitted_for_review_units.len())?;
+            limits.check(
+                ResourceKind::GraphNodes,
+                request.submitted_for_review_units.len(),
+            )?;
 
             // Account for fields copied into D2/D3 requests before cloning them.
             let mut bytes = 0_usize;
@@ -351,7 +357,12 @@ impl AnalysisRunner {
                     outcome,
                     plan: Some(plan),
                     findings: code
-                        .map(|code| vec![AnalysisFinding { code, phase: AnalysisPhase::Plan }])
+                        .map(|code| {
+                            vec![AnalysisFinding {
+                                code,
+                                phase: AnalysisPhase::Plan,
+                            }]
+                        })
                         .unwrap_or_default(),
                     failure: None,
                     metrics: request.include_metrics.then_some(metrics),
@@ -392,8 +403,14 @@ mod tests {
 
     #[test]
     fn all_five_outcomes_keep_external_approval_separate() {
-        assert_eq!(classify(PlanAssessmentState::Blocked, 0).0, AnalysisOutcome::Infeasible);
-        assert_eq!(classify(PlanAssessmentState::Partial, 0).0, AnalysisOutcome::Partial);
+        assert_eq!(
+            classify(PlanAssessmentState::Blocked, 0).0,
+            AnalysisOutcome::Infeasible
+        );
+        assert_eq!(
+            classify(PlanAssessmentState::Partial, 0).0,
+            AnalysisOutcome::Partial
+        );
         assert_eq!(
             classify(PlanAssessmentState::ExternalApprovalPending, 0).1,
             Some(AnalysisFindingCode::ExternalReviewRequired)
@@ -406,6 +423,9 @@ mod tests {
             classify(PlanAssessmentState::CompleteEvidenceForReview, 0).0,
             AnalysisOutcome::Complete
         );
-        assert_eq!(AnalysisFindingCode::ValidationFailed.as_str(), "CSHIFT_ANALYSIS_FAILED");
+        assert_eq!(
+            AnalysisFindingCode::ValidationFailed.as_str(),
+            "CSHIFT_ANALYSIS_FAILED"
+        );
     }
 }
