@@ -29,6 +29,8 @@ jobs:
         run: python3 scripts/release_safety.py --with-cargo
       - name: Release safety regression tests
         run: python3 -m unittest discover -s scripts -p "test_release_safety.py" -v
+      - name: Release candidate governance and SBOM regression tests
+        run: python3 -m unittest discover -s scripts -p "test_release_candidate.py" -v
       - name: Inspect Cargo package without publishing
         run: cargo package --locked --list -p cryptoshift
       - name: Cache Cargo
