@@ -26,11 +26,11 @@ An eligible manual run creates these files in `dist/release-candidate/`:
 | Artifact | Meaning |
 | --- | --- |
 | `cryptoshift-<version>.crate` | Source package built from exactly the verified Cargo workspace. |
-| `sbom.spdx.json` | SPDX 2.3 package inventory based on Cargo.lock with original registry checksums. License fields are `NOASSERTION` until independently supported by package metadata and `cargo deny`; this is not a license certification. |
+| `sbom.spdx.json` | SPDX 2.3 package inventory based on Cargo.lock with original registry checksums. Known crates.io registry identifiers map to valid archive download URLs (unrecognized sources are `NOASSERTION`); license fields remain `NOASSERTION` until independently supported by package metadata and `cargo deny`. This is not a license certification. |
 | `provenance-unsigned.json` | Unsigned in-toto Statement/SLSA v1-shaped metadata containing pinned source and file SHA-256 material descriptors under `buildDefinition.resolvedDependencies` (not an invalid `materials` field). **Unsigned** metadata is not a source attestation or signed provenance. |
 | `CHANGELOG.md` | Reviewed, exact-version draft release notes. |
 
-The manual workflow then invokes the pinned `actions/attest-build-provenance` action with scoped OIDC and GitHub attestation permissions, binding its independent attestation to the exact `.crate` SHA-256. It uploads the candidate files with a pinned artifact action and finite retention.
+The **unprivileged candidate job** packages the crate, verifies the protected source and all five checks, then uploads evidence with a pinned artifact action and finite retention. It has `contents:read` and `checks:read` only: **no OIDC or attestation write privilege is present while executing package/dependency build scripts**. A separately isolated **attestation job** depends on successful candidate qualification, downloads the exact candidate with a pinned action, verifies the original job's SHA-256 against the downloaded crate and unsigned provenance subject, and only then invokes pinned `actions/attest-build-provenance` with scoped OIDC and attestation permissions. The attestation job does not check out or execute repository build code.
 
 The SHA-256 identifies bytes; it is not a signature. Validate the GitHub attestation separately and verify the artifact digest locally before trusting the candidate. The workflow's pinned GitHub Actions check-runs and attestation still do not certify external Cryptomap/Cryptopolicy wire compatibility, runtime peer negotiation, PKI authority or safe execution.
 

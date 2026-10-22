@@ -11,6 +11,7 @@ from release_candidate import (
     ruleset_errors,
     sbom,
     provenance_statement,
+    download_location,
     workflow_errors,
 )
 
@@ -201,22 +202,50 @@ class CandidateGateTests(unittest.TestCase):
             ("persist-credentials: false", "persist-credentials: true"),
             ("attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a", "attest-build-provenance@v3"),
             ("    steps:", "    continue-on-error: true\n    steps:"),
+            ("    needs: candidate", "    needs: unknown-job"),
+            ("      checks: read", "      checks: read\n      id-token: write"),
+            ("actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093", "actions/download-artifact@v4"),
+            ("      id-token: write", "      id-token: read"),
         ]
         for original, replacement in mutations:
             with self.subTest(original=original):
                 self.assertIn(original, text)
                 self.assertTrue(workflow_errors(text.replace(original, replacement)))
 
+    def test_spdx_download_locations_never_expose_invalid_registry_scheme(self) -> None:
+        item = {
+            "name": "sha2",
+            "version": "0.10.9",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+        }
+        expected = "https://static.crates.io/crates/sha2/sha2-0.10.9.crate"
+        self.assertEqual(download_location(item), expected)
+        item["source"] = "sparse+https://index.crates.io/"
+        self.assertEqual(download_location(item), expected)
+        item["source"] = "opaque+https://untrusted.invalid/registry"
+        self.assertEqual(download_location(item), "NOASSERTION")
+        item["source"] = "git+https://github.com/example/valid-repo?rev=abc"
+        self.assertEqual(download_location(item), item["source"])
+        item["name"] = "../bad-path"
+        item["source"] = "registry+https://github.com/rust-lang/crates.io-index"
+        with self.assertRaises(ValueError):
+            download_location(item)
+
     def test_spdx_is_deterministic_and_checksum_bound(self) -> None:
         contents = (
             b'version = 4\n'
             b'[[package]]\nname = "cryptoshift"\nversion = "0.1.0"\n'
             b'[[package]]\nname = "sha2"\nversion = "0.10.9"\n'
+            b'source = "registry+https://github.com/rust-lang/crates.io-index"\n'
             b'checksum = "' + (b"e" * 64) + b'"\n'
         )
         result = sbom(contents, "0.1.0", "a" * 40, "2026-10-21T13:00:00+00:00", "b" * 64)
         self.assertEqual(result["spdxVersion"], "SPDX-2.3")
         self.assertEqual(result["packages"][0]["checksums"][0]["checksumValue"], "b" * 64)
+        self.assertEqual(
+            result["packages"][1]["downloadLocation"],
+            "https://static.crates.io/crates/sha2/sha2-0.10.9.crate",
+        )
         self.assertEqual(result, sbom(contents, "0.1.0", "a" * 40, "2026-10-21T13:00:00+00:00", "b" * 64))
         with self.assertRaises(ValueError):
             sbom(contents.replace(b"e" * 64, b"unsafe"), "0.1.0", "a" * 40, "2026-10-21T13:00:00+00:00", "b" * 64)

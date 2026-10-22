@@ -28,8 +28,8 @@ jobs:
     permissions:
       contents: read
       checks: read
-      id-token: write
-      attestations: write
+    outputs:
+      crate_sha256: ${{ steps.record-crate-digest.outputs.sha256 }}
     concurrency:
       group: cryptoshift-candidate-${{ github.ref }}
       cancel-in-progress: false
@@ -61,10 +61,17 @@ jobs:
             --expected-version "$EXPECTED_VERSION" \
             --output-dir dist/release-candidate \
             --require-branch-gates
-      - name: Attest exact built crate provenance
-        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
-        with:
-          subject-path: dist/release-candidate/*.crate
+      - name: Record exact qualified crate SHA-256
+        id: record-crate-digest
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          file="dist/release-candidate/cryptoshift-${EXPECTED_VERSION}.crate"
+          test -f "$file"
+          checksum=$(sha256sum "$file" | cut -d " " -f1)
+          [[ "$checksum" =~ ^[0-9a-f]{64}$ ]]
+          printf "sha256=%s\n" "$checksum" >> "$GITHUB_OUTPUT"
       - name: Upload nonpublishing candidate evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -72,3 +79,43 @@ jobs:
           path: dist/release-candidate/
           if-no-files-found: error
           retention-days: 30
+
+  attest:
+    name: Attest verified release candidate
+    needs: candidate
+    if: ${{ github.repository_owner == 'LATTIX-IO' && github.ref == 'refs/heads/main' && inputs.confirm_candidate }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download qualified candidate evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cryptoshift-release-candidate-${{ inputs.version }}
+          path: dist/release-candidate
+      - name: Verify exact qualified crate subject
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+          EXPECTED_SHA256: ${{ needs.candidate.outputs.crate_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          [[ "$EXPECTED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          file="dist/release-candidate/cryptoshift-${EXPECTED_VERSION}.crate"
+          printf "%s  %s\n" "$EXPECTED_SHA256" "$file" | sha256sum --check --status
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          version = os.environ["EXPECTED_VERSION"]
+          expected = os.environ["EXPECTED_SHA256"]
+          crate = Path("dist/release-candidate") / f"cryptoshift-{version}.crate"
+          statement = json.loads(Path("dist/release-candidate/provenance-unsigned.json").read_text())
+          assert statement["subject"] == [{"name": crate.name, "digest": {"sha256": expected}}]
+          assert hashlib.sha256(crate.read_bytes()).hexdigest() == expected
+          PY
+      - name: Attest exact built crate provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: dist/release-candidate/*.crate

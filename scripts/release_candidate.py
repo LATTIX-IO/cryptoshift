@@ -176,18 +176,46 @@ def workflow_errors(workflow: str) -> list[str]:
     errors = []
     if section_keys(workflow, "on") != ["workflow_dispatch"]:
         errors.append("candidate workflow must have only workflow_dispatch")
-    if section_keys(workflow, "jobs") != ["candidate"]:
-        errors.append("candidate workflow must have exactly one job")
+    if section_keys(workflow, "jobs") != ["candidate", "attest"]:
+        errors.append("candidate workflow requires separate package and attestation jobs")
     expected_if = (
         "if: $" + "{{ github.repository_owner == 'LATTIX-IO' && "
         "github.ref == 'refs/heads/main' && inputs.confirm_candidate }}"
     )
     job = job_lines(workflow, "candidate")
+    attestation_job = job_lines(workflow, "attest")
     conditions = [line.strip() for line in job if line.startswith("    if:")]
-    if conditions != [expected_if]:
-        errors.append("candidate job requires exact owner/main/confirmation conjunction")
+    attest_conditions = [line.strip() for line in attestation_job if line.startswith("    if:")]
+    if conditions != [expected_if] or attest_conditions != [expected_if]:
+        errors.append("both release jobs require exact owner/main/confirmation conjunction")
     if not executable_step(job, "Package and test detached consumer", "python3 scripts/package_consumer_check.py"):
         errors.append("candidate workflow must execute the packaged consumer")
+    if "    needs: candidate" not in attestation_job:
+        errors.append("attestation must depend on successful candidate qualification")
+    if "      id-token: write" in job or "      attestations: write" in job:
+        errors.append("untrusted package build job must not have attestation/OIDC permissions")
+    if "      checks: read" not in job or "      contents: read" not in job:
+        errors.append("candidate build job requires scoped read-only permissions")
+    if "      id-token: write" not in attestation_job or "      attestations: write" not in attestation_job:
+        errors.append("attestation job requires scoped OIDC and attestations permissions")
+    if "      contents: read" not in attestation_job:
+        errors.append("attestation job must have minimal contents:read")
+    if "actions/attest-build-provenance@" in "\n".join(job):
+        errors.append("candidate build must not execute attestation action")
+    if "python3 scripts/" in "\n".join(attestation_job) or "cargo " in "\n".join(attestation_job):
+        errors.append("privileged attestation job must not execute repository build code")
+    download = named_step(attestation_job, "Download qualified candidate evidence")
+    if "uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093" not in "\n".join(download):
+        errors.append("attestation must download an artifact with the reviewed immutable action pin")
+    if "      crate_sha256: ${{ steps.record-crate-digest.outputs.sha256 }}" not in workflow:
+        errors.append("candidate must pass an exact package digest to isolated attestation")
+    verify = named_step(attestation_job, "Verify exact qualified crate subject")
+    if not verify or "sha256sum --check --status" not in "\n".join(verify) or "provenance-unsigned.json" not in "\n".join(verify):
+        errors.append("attestation must re-verify archived crate digest and source claim")
+    if "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a" not in "\n".join(
+        named_step(attestation_job, "Attest exact built crate provenance")
+    ):
+        errors.append("signed attestation step must be isolated and pinned")
     for required in (
         "github.repository_owner == 'LATTIX-IO'",
         "github.ref == 'refs/heads/main'",
@@ -243,6 +271,25 @@ def validated_inputs(expected_commit: str, expected_version: str, require_rules:
     return version, git("show", "-s", "--format=%cI", "HEAD")
 
 
+def download_location(package: dict) -> str:
+    """Use only valid SPDX download URLs or recognized VCS references."""
+    source = package.get("source")
+    if source in (
+        "registry+https://github.com/rust-lang/crates.io-index",
+        "sparse+https://index.crates.io/",
+    ):
+        name = package["name"]
+        version = package["version"]
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", name) or not VERSION.fullmatch(version):
+            raise ValueError("invalid Cargo registry package identity")
+        return f"https://static.crates.io/crates/{name}/{name}-{version}.crate"
+    if isinstance(source, str) and source.startswith("git+https://") and not any(
+        char.isspace() for char in source
+    ):
+        return source
+    return "NOASSERTION"
+
+
 def sbom(lockfile: bytes, version: str, commit: str, timestamp: str, archive_sha: str) -> dict:
     """SPDX 2.3 manifest from exact Cargo.lock entries, with explicit unknown licenses."""
     lock = tomllib.loads(lockfile.decode("utf-8"))
@@ -253,7 +300,7 @@ def sbom(lockfile: bytes, version: str, commit: str, timestamp: str, archive_sha
             "SPDXID": ref,
             "name": package["name"],
             "versionInfo": package["version"],
-            "downloadLocation": package.get("source", "NOASSERTION"),
+            "downloadLocation": download_location(package),
             "filesAnalyzed": False,
             "licenseDeclared": "NOASSERTION",
             "licenseConcluded": "NOASSERTION",
