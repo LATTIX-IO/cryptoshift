@@ -48,6 +48,8 @@ def ruleset_errors(ruleset: dict) -> list[str]:
     controls = [rule for rule in ruleset.get("rules", []) if rule.get("type") == "required_status_checks"]
     if ruleset.get("enforcement") != "active" or len(controls) != 1:
         return ["missing active required-status-check rule"]
+    if ruleset.get("bypass_actors"):
+        return ["main protection contains bypass actors; review and eliminate exception before release"]
     params = controls[0].get("parameters", {})
     contexts = [x.get("context") for x in params.get("required_status_checks", [])]
     errors = []
