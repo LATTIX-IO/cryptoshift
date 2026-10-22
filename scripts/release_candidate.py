@@ -113,6 +113,38 @@ def read_live_ruleset() -> dict:
         return json.load(response)
 
 
+def workflow_errors(workflow: str) -> list[str]:
+    """Check the reviewed, nonpublishing manual workflow shape."""
+    errors = []
+    if not re.search(r"(?m)^on:\\n  workflow_dispatch:\\n", workflow):
+        errors.append("candidate workflow must use workflow_dispatch")
+    if re.search(r"(?m)^  (?:push|pull_request|schedule|release):", workflow):
+        errors.append("candidate workflow must not start automatically")
+    for required in (
+        "github.repository_owner == 'LATTIX-IO'",
+        "github.ref == 'refs/heads/main'",
+        "inputs.confirm_candidate",
+        "persist-credentials: false",
+        "contents: read",
+        "checks: read",
+        "id-token: write",
+        "attestations: write",
+        "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
+        "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+        "python3 scripts/package_consumer_check.py",
+        "python3 scripts/release_candidate.py",
+        "--require-branch-gates",
+    ):
+        if required not in workflow:
+            errors.append("candidate workflow missing: " + required)
+    if "continue-on-error:" in workflow:
+        errors.append("candidate workflow cannot ignore failures")
+    if re.search(r"\\bcargo\\s+publish\\b", workflow):
+        errors.append("candidate workflow must not publish")
+    return errors
+
+
 def git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, text=True, capture_output=True, check=True).stdout.strip()
 
@@ -130,6 +162,10 @@ def validated_inputs(expected_commit: str, expected_version: str, require_rules:
     if version != expected_version or manifest["package"].get("publish") is not False:
         raise ValueError("wrong package version or unsafe publish flag")
     if require_rules:
+        workflow = (ROOT / ".github" / "workflows" / "release-candidate.yml").read_text(encoding="utf-8")
+        errors = workflow_errors(workflow)
+        if errors:
+            raise ValueError("; ".join(errors))
         if os.environ.get("GITHUB_REPOSITORY") != REPO or os.environ.get("GITHUB_REF") != "refs/heads/main":
             raise ValueError("candidate evidence can run only on owner-controlled main")
         errors = ruleset_errors(read_live_ruleset())
