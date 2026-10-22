@@ -21,8 +21,44 @@ permissions:
   contents: read
 
 jobs:
+  governance:
+    name: Independently qualify main ruleset and exact commit
+    if: ${{ github.repository_owner == 'LATTIX-IO' && github.ref == 'refs/heads/main' && inputs.confirm_candidate }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: Checkout exact main for governance
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Mint ephemeral repository-scoped ruleset audit token
+        id: ruleset-token
+        uses: actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94 # v2.2.0
+        with:
+          client-id: ${{ vars.CRYPTOSHIFT_RULESET_AUDIT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CRYPTOSHIFT_RULESET_AUDIT_APP_PRIVATE_KEY }}
+          owner: LATTIX-IO
+          repositories: cryptoshift
+          permission-administration: write
+      - name: Validate protected source governance
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RULESET_AUDIT_TOKEN: ${{ steps.ruleset-token.outputs.token }}
+        run: |
+          python3 scripts/release_candidate.py \
+            --expected-commit "$EXPECTED_COMMIT" \
+            --expected-version "$EXPECTED_VERSION" \
+            --require-branch-gates \
+            --governance-only
+
   candidate:
     name: Manual release candidate SBOM and provenance
+    needs: governance
     if: ${{ github.repository_owner == 'LATTIX-IO' && github.ref == 'refs/heads/main' && inputs.confirm_candidate }}
     runs-on: ubuntu-latest
     permissions:
@@ -59,8 +95,7 @@ jobs:
           python3 scripts/release_candidate.py \
             --expected-commit "$EXPECTED_COMMIT" \
             --expected-version "$EXPECTED_VERSION" \
-            --output-dir dist/release-candidate \
-            --require-branch-gates
+            --output-dir dist/release-candidate
       - name: Record exact qualified crate SHA-256
         id: record-crate-digest
         env:

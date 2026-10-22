@@ -140,7 +140,7 @@ def read_live_checks(commit: str) -> dict:
     checks = []
     total = None
     for page in range(1, 11):
-        url = f"{base}?per_page=100&page={page}"
+        url = f"{base}?filter=all&per_page=100&page={page}"
         with urlopen(Request(url, headers=headers), timeout=15) as response:
             payload = json.load(response)
         count = payload.get("total_count")
@@ -164,9 +164,10 @@ def read_live_ruleset() -> dict:
     """Read the active GitHub governance rule; no app-admin mutation is possible."""
     url = f"https://api.github.com/repos/{REPO}/rulesets/{RULESET_ID}"
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "cryptoshift-release-candidate"}
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        headers["Authorization"] = "Bearer " + token
+    token = os.environ.get("RULESET_AUDIT_TOKEN")
+    if not token:
+        raise ValueError("missing independently provisioned ruleset-audit credential")
+    headers["Authorization"] = "Bearer " + token
     with urlopen(Request(url, headers=headers), timeout=15) as response:
         return json.load(response)
 
@@ -176,24 +177,56 @@ def workflow_errors(workflow: str) -> list[str]:
     errors = []
     if section_keys(workflow, "on") != ["workflow_dispatch"]:
         errors.append("candidate workflow must have only workflow_dispatch")
-    if section_keys(workflow, "jobs") != ["candidate", "attest"]:
+    if section_keys(workflow, "jobs") != ["governance", "candidate", "attest"]:
         errors.append("candidate workflow requires separate package and attestation jobs")
     expected_if = (
         "if: $" + "{{ github.repository_owner == 'LATTIX-IO' && "
         "github.ref == 'refs/heads/main' && inputs.confirm_candidate }}"
     )
+    governance_job = job_lines(workflow, "governance")
     job = job_lines(workflow, "candidate")
     attestation_job = job_lines(workflow, "attest")
     conditions = [line.strip() for line in job if line.startswith("    if:")]
+    govern_conditions = [line.strip() for line in governance_job if line.startswith("    if:")]
     attest_conditions = [line.strip() for line in attestation_job if line.startswith("    if:")]
-    if conditions != [expected_if] or attest_conditions != [expected_if]:
-        errors.append("both release jobs require exact owner/main/confirmation conjunction")
+    if conditions != [expected_if] or govern_conditions != [expected_if] or attest_conditions != [expected_if]:
+        errors.append("all release jobs require exact owner/main/confirmation conjunction")
+    if "    needs: governance" not in job:
+        errors.append("candidate build must depend on successful independent governance qualification")
+    if "    needs:" in governance_job:
+        errors.append("governance must be first and independent of untrusted package execution")
+    if "      id-token: write" in governance_job or "      attestations: write" in governance_job:
+        errors.append("governance job must not have OIDC or attestation write permissions")
+    if "      contents: read" not in governance_job or "      checks: read" not in governance_job:
+        errors.append("governance must use read-only Actions token permissions")
+    if "cargo " in "\n".join(governance_job) or "scripts/package_consumer_check.py" in "\n".join(governance_job):
+        errors.append("privileged ruleset audit job must not execute package/dependency builds")
+    mint = named_step(governance_job, "Mint ephemeral repository-scoped ruleset audit token")
+    if "uses: actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94" not in "\n".join(mint):
+        errors.append("governance must use reviewed pinned GitHub App token action")
+    for required_input in (
+        "owner: LATTIX-IO", "repositories: cryptoshift",
+        "permission-administration: write",
+        "vars.CRYPTOSHIFT_RULESET_AUDIT_APP_CLIENT_ID",
+        "secrets.CRYPTOSHIFT_RULESET_AUDIT_APP_PRIVATE_KEY",
+    ):
+        if required_input not in "\n".join(mint):
+            errors.append("ruleset audit token must be scoped to the repository and minimum GitHub API permission")
+    verify_gate = named_step(governance_job, "Validate protected source governance")
+    if "--require-branch-gates" not in "\n".join(verify_gate) or "--governance-only" not in "\n".join(verify_gate):
+        errors.append("governance must enforce the exact branch/ruleset/check gate")
+    if "RULESET_AUDIT_TOKEN: ${{ steps.ruleset-token.outputs.token }}" not in "\n".join(verify_gate):
+        errors.append("governance must use an independently provisioned ephemeral App token")
+    if "RULESET_AUDIT_TOKEN:" in "\n".join([*job, *attestation_job]):
+        errors.append("administrative token must never reach build or attestation jobs")
     if not executable_step(job, "Package and test detached consumer", "python3 scripts/package_consumer_check.py"):
         errors.append("candidate workflow must execute the packaged consumer")
     if "    needs: candidate" not in attestation_job:
         errors.append("attestation must depend on successful candidate qualification")
     if "      id-token: write" in job or "      attestations: write" in job:
         errors.append("untrusted package build job must not have attestation/OIDC permissions")
+    if "--require-branch-gates" in "\n".join(job):
+        errors.append("candidate build must not receive privileged ruleset-verification token")
     if "      checks: read" not in job or "      contents: read" not in job:
         errors.append("candidate build job requires scoped read-only permissions")
     if "      id-token: write" not in attestation_job or "      attestations: write" not in attestation_job:
@@ -226,6 +259,8 @@ def workflow_errors(workflow: str) -> list[str]:
         "id-token: write",
         "attestations: write",
         "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94",
+        "--governance-only",
         "actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a",
         "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
         "python3 scripts/package_consumer_check.py",
@@ -358,7 +393,7 @@ def provenance_statement(
                 "resolvedDependencies": dependencies,
             },
             "runDetails": {
-                "builder": {"id": "cryptoshift-manual-candidate-v1"},
+                "builder": {"id": "https://github.com/LATTIX-IO/cryptoshift/.github/workflows/release-candidate.yml#manual-v1"},
                 "metadata": {"invocationId": invocation_id},
             },
         },
@@ -399,10 +434,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--expected-commit", required=True)
     parser.add_argument("--expected-version", required=True)
-    parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--require-branch-gates", action="store_true")
+    parser.add_argument("--governance-only", action="store_true")
     args = parser.parse_args()
-    build(args.expected_commit, args.expected_version, args.output_dir, args.require_branch_gates)
+    if args.governance_only:
+        if not args.require_branch_gates or args.output_dir is not None:
+            parser.error("governance-only requires live gates and no output directory")
+        validated_inputs(args.expected_commit, args.expected_version, True)
+        print("protected main governance and all five exact-head checks: PASS")
+    else:
+        if args.output_dir is None:
+            parser.error("candidate generation requires --output-dir")
+        build(args.expected_commit, args.expected_version, args.output_dir, args.require_branch_gates)
 
 
 if __name__ == "__main__":
