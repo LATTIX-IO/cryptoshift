@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import io
+import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 from release_candidate import (
     REQUIRED,
@@ -12,6 +15,7 @@ from release_candidate import (
     sbom,
     provenance_statement,
     download_location,
+    read_live_checks,
     workflow_errors,
 )
 
@@ -203,6 +207,10 @@ class CandidateGateTests(unittest.TestCase):
             ("attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a", "attest-build-provenance@v3"),
             ("    steps:", "    continue-on-error: true\n    steps:"),
             ("    needs: candidate", "    needs: unknown-job"),
+            ("    needs: governance", "    needs: unverified-governance"),
+            ("permission-administration: write", "permission-administration: read"),
+            ("actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94", "actions/create-github-app-token@v2"),
+            ("RULESET_AUDIT_TOKEN: ${{ steps.ruleset-token.outputs.token }}", "RULESET_AUDIT_TOKEN: ${{ github.token }}"),
             ("      checks: read", "      checks: read\n      id-token: write"),
             ("actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093", "actions/download-artifact@v4"),
             ("      id-token: write", "      id-token: read"),
@@ -211,6 +219,47 @@ class CandidateGateTests(unittest.TestCase):
             with self.subTest(original=original):
                 self.assertIn(original, text)
                 self.assertTrue(workflow_errors(text.replace(original, replacement)))
+
+    def test_live_check_query_fetches_all_not_filtered_latest(self) -> None:
+        # GitHub defaults check-runs to filter=latest; that can remove newer
+        # queued/failed jobs before our fail-closed ID ordering is applied.
+        calls = []
+        first = {
+            "total_count": 101,
+            "check_runs": [{"id": index + 1} for index in range(100)],
+        }
+        second = {"total_count": 101, "check_runs": [{"id": 101}]}
+
+        def response(request, timeout=15):
+            url = request.full_url
+            calls.append(url)
+            payload = first if "page=1" in url else second
+            return io.BytesIO(json.dumps(payload).encode())
+
+        with patch("release_candidate.urlopen", side_effect=response):
+            result = read_live_checks(TEST_COMMIT)
+        self.assertEqual(result["total_count"], 101)
+        self.assertEqual(len(result["check_runs"]), 101)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all("filter=all" in url for url in calls))
+        self.assertTrue(all("per_page=100" in url for url in calls))
+
+    def test_ruleset_reader_does_not_fall_back_to_ordinary_actions_token(self) -> None:
+        from release_candidate import read_live_ruleset
+        with patch.dict("release_candidate.os.environ", {
+            "GITHUB_TOKEN": "unprivileged-test-token",
+        }, clear=True):
+            with self.assertRaisesRegex(ValueError, "ruleset-audit credential"):
+                read_live_ruleset()
+
+    def test_slsa_builder_uses_stable_type_uri(self) -> None:
+        statement = provenance_statement(
+            "0.1.0", TEST_COMMIT, "cryptoshift-0.1.0.crate",
+            "f" * 64, {"Cargo.lock": "d" * 64}, "test-run",
+        )
+        builder = statement["predicate"]["runDetails"]["builder"]["id"]
+        self.assertTrue(builder.startswith("https://github.com/LATTIX-IO/cryptoshift/"))
+        self.assertIn("#manual-v1", builder)
 
     def test_spdx_download_locations_never_expose_invalid_registry_scheme(self) -> None:
         item = {
