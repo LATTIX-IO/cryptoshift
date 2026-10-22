@@ -68,9 +68,14 @@ def verify(toolchain: str | None) -> None:
     command = ["cargo", *([f"+{toolchain}"] if toolchain else [])]
     env = os.environ.copy()
     env["CARGO_NET_OFFLINE"] = "true"
+    # Cargo config and CARGO_TARGET_DIR may redirect output. Fix the target
+    # explicitly and reject a stale package from a prior run.
+    target_dir = (ROOT / "target").resolve()
+    env["CARGO_TARGET_DIR"] = str(target_dir)
+    package = target_dir / "package" / f"{stem}.crate"
+    if package.exists():
+        package.unlink()
     execute([*command, "package", "-p", "cryptoshift", "--offline", "--locked"], env=env)
-
-    package = ROOT / "target" / "package" / f"{stem}.crate"
     raw = package.read_bytes()
     if len(raw) > 25_000_000:
         raise RuntimeError("unexpected package size")
