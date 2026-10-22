@@ -46,6 +46,8 @@ The [Getting Started guide](docs/GETTING_STARTED.md) documents the v1 public API
     cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
     cargo test --workspace --all-features --locked
 
+The [FOSS-456 release assurance procedure](docs/RELEASE_ASSURANCE.md) describes a manual, no-publish candidate workflow with full main ruleset/check-run verification, SPDX inventory, source-bound provenance metadata and an independent GitHub artifact attestation. It cannot run successfully until FOSS-509 administration and all required CI gates are satisfied. A separate explicit approval is required before any registry release.
+
 ## Release safety
 
 All workspace crate manifests explicitly declare `publish = false`. Release-plz

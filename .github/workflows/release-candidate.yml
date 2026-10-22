@@ -1,0 +1,156 @@
+name: Cryptoshift release candidate evidence (manual, never publish)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact 40-character protected main commit to qualify
+        required: true
+        type: string
+      version:
+        description: Explicit semantic candidate version
+        required: true
+        type: string
+      confirm_candidate:
+        description: Confirm generation of nonpublishing candidate artifacts
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    name: Independently qualify main ruleset and exact commit
+    if: ${{ github.repository_owner == 'LATTIX-IO' && github.ref == 'refs/heads/main' && inputs.confirm_candidate }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - name: Checkout exact main for governance
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Mint ephemeral repository-scoped ruleset audit token
+        id: ruleset-token
+        uses: actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94 # v2.2.0
+        with:
+          client-id: ${{ vars.CRYPTOSHIFT_RULESET_AUDIT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CRYPTOSHIFT_RULESET_AUDIT_APP_PRIVATE_KEY }}
+          owner: LATTIX-IO
+          repositories: cryptoshift
+          permission-administration: write
+      - name: Validate protected source governance
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
+          RULESET_AUDIT_TOKEN: ${{ steps.ruleset-token.outputs.token }}
+        run: |
+          python3 scripts/release_candidate.py \
+            --expected-commit "$EXPECTED_COMMIT" \
+            --expected-version "$EXPECTED_VERSION" \
+            --require-branch-gates \
+            --governance-only
+
+  candidate:
+    name: Manual release candidate SBOM and provenance
+    needs: governance
+    if: ${{ github.repository_owner == 'LATTIX-IO' && github.ref == 'refs/heads/main' && inputs.confirm_candidate }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+    outputs:
+      crate_sha256: ${{ steps.record-crate-digest.outputs.sha256 }}
+    concurrency:
+      group: cryptoshift-candidate-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Verify safe release settings
+        run: python3 scripts/release_safety.py --with-cargo
+      - name: Download exact locked dependencies
+        run: cargo fetch --locked
+      - name: Package and test detached consumer
+        run: python3 scripts/package_consumer_check.py
+      - name: Validate protected source and construct evidence
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_candidate.py \
+            --expected-commit "$EXPECTED_COMMIT" \
+            --expected-version "$EXPECTED_VERSION" \
+            --output-dir dist/release-candidate
+      - name: Record exact qualified crate SHA-256
+        id: record-crate-digest
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          file="dist/release-candidate/cryptoshift-${EXPECTED_VERSION}.crate"
+          test -f "$file"
+          checksum=$(sha256sum "$file" | cut -d " " -f1)
+          [[ "$checksum" =~ ^[0-9a-f]{64}$ ]]
+          printf "sha256=%s\n" "$checksum" >> "$GITHUB_OUTPUT"
+      - name: Upload nonpublishing candidate evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cryptoshift-release-candidate-${{ inputs.version }}
+          path: dist/release-candidate/
+          if-no-files-found: error
+          retention-days: 30
+
+  attest:
+    name: Attest verified release candidate
+    needs: candidate
+    if: ${{ github.repository_owner == 'LATTIX-IO' && github.ref == 'refs/heads/main' && inputs.confirm_candidate }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download qualified candidate evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cryptoshift-release-candidate-${{ inputs.version }}
+          path: dist/release-candidate
+      - name: Verify exact qualified crate subject
+        env:
+          EXPECTED_VERSION: ${{ inputs.version }}
+          EXPECTED_SHA256: ${{ needs.candidate.outputs.crate_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          [[ "$EXPECTED_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          file="dist/release-candidate/cryptoshift-${EXPECTED_VERSION}.crate"
+          printf "%s  %s\n" "$EXPECTED_SHA256" "$file" | sha256sum --check --status
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          version = os.environ["EXPECTED_VERSION"]
+          expected = os.environ["EXPECTED_SHA256"]
+          crate = Path("dist/release-candidate") / f"cryptoshift-{version}.crate"
+          statement = json.loads(Path("dist/release-candidate/provenance-unsigned.json").read_text())
+          assert statement["subject"] == [{"name": crate.name, "digest": {"sha256": expected}}]
+          assert hashlib.sha256(crate.read_bytes()).hexdigest() == expected
+          PY
+      - name: Attest exact built crate provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: dist/release-candidate/*.crate
