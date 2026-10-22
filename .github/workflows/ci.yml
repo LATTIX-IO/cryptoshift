@@ -43,6 +43,9 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Test
         run: cargo test --workspace --all-features --locked
+      - name: Versioned enterprise conformance replay
+        run: cargo test -p cryptoshift --test conformance_v1 --locked
+
       - name: Standalone offline peer compatibility acceptance
         shell: bash
         run: |
@@ -160,3 +163,34 @@ jobs:
         run: cargo deny check
       - name: SemVer compatibility
         run: cargo semver-checks check-release --workspace --all-features
+
+  windows-conformance:
+    name: Windows Rust ${{ matrix.toolchain }} conformance
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ["1.85.0", "stable"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+      - name: Check formatting and conformance
+        shell: pwsh
+        run: |
+          cargo fmt --all -- --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo check --workspace --all-targets --all-features --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test -p cryptoshift --test conformance_v1 --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo run --frozen --manifest-path acceptance/neutral-consumer/Cargo.toml
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
