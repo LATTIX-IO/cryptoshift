@@ -100,6 +100,11 @@ jobs:
           grep -Fq "neutral delta claims: 1" <<< "$output"
           grep -Fq "neutral policy gate: Unverified" <<< "$output"
           grep -Fq "No authentication, negotiated peer proof, migration approval, or publishing occurred." <<< "$output"
+      - name: Detached packaged crate acceptance (no registry publish)
+        shell: bash
+        run: |
+          python3 -m unittest scripts.test_package_consumer_check -v
+          python3 scripts/package_consumer_check.py
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings
@@ -123,6 +128,8 @@ jobs:
         run: cargo +1.85.0 test --workspace --all-features --locked
       - name: Independently build neutral fixture consumer on MSRV
         run: cargo +1.85.0 run --frozen --manifest-path acceptance/neutral-consumer/Cargo.toml
+      - name: Packaged clean-room consumer on Rust 1.85
+        run: python3 scripts/package_consumer_check.py --toolchain 1.85.0
 
   supply-chain:
     name: Supply chain and SemVer
