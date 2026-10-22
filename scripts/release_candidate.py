@@ -116,7 +116,7 @@ def read_live_ruleset() -> dict:
 def workflow_errors(workflow: str) -> list[str]:
     """Check the reviewed, nonpublishing manual workflow shape."""
     errors = []
-    if not re.search(r"(?m)^on:\\n  workflow_dispatch:\\n", workflow):
+    if not re.search(r"(?m)^on:\n  workflow_dispatch:\n", workflow):
         errors.append("candidate workflow must use workflow_dispatch")
     if re.search(r"(?m)^  (?:push|pull_request|schedule|release):", workflow):
         errors.append("candidate workflow must not start automatically")
@@ -140,7 +140,7 @@ def workflow_errors(workflow: str) -> list[str]:
             errors.append("candidate workflow missing: " + required)
     if "continue-on-error:" in workflow:
         errors.append("candidate workflow cannot ignore failures")
-    if re.search(r"\\bcargo\\s+publish\\b", workflow):
+    if re.search(r"\bcargo\s+publish\b", workflow):
         errors.append("candidate workflow must not publish")
     return errors
 
