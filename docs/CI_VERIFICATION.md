@@ -35,7 +35,7 @@ cargo deny check
 cargo semver-checks check-release --workspace --all-features
 ```
 
-Expected: all exit zero; two CI jobs succeed. Negative regressions must fail if either job/mandatory step is disabled, made nonfatal, or replaced with an echo command; weakening the publication guard or allowing PR cache writes must also fail.
+Expected: all exit zero; all five independent CI check contexts succeed on the exact head, including Rust 1.85 and the Windows stable/1.85 matrix. Negative regressions must fail if either job/mandatory step is disabled, made nonfatal, or replaced with an echo command; weakening the publication guard or allowing PR cache writes must also fail.
 
 ## Observability and acceptance
 
@@ -43,4 +43,4 @@ Baseline single-job Rust CI on `main`: [run #38969570693](https://github.com/LAT
 
 Record both **cold** (empty cache) and **warm** (`main` cache available) job start/end times from GitHub's job page after this PR runs. There is no benchmark claim until both have actually executed. Fail closed if cache unavailable; do not make elapsed time a release gate.
 
-**Administration**: GitHub branch rules are not configured by this PR. Require `Rust checks` and `Supply chain and SemVer` in repo settings, and keep review-thread resolution, signed commits and protected `main` where available.
+**Administration**: GitHub branch rules are not configured by this PR. Require all five exact contexts: `Rust checks`, `Rust 1.85 MSRV`, `Supply chain and SemVer`, `Windows Rust stable conformance`, and `Windows Rust 1.85.0 conformance`. Keep strict checks, review-thread resolution, signed commits, linear history and protected `main`. FOSS-509 tracks the necessary administrator change.
