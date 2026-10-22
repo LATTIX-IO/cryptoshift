@@ -113,6 +113,7 @@ class CandidateGateTests(unittest.TestCase):
         mutations = [
             ("  workflow_dispatch:", "  push:\n    branches: [main]\n  workflow_dispatch:"),
             ("inputs.confirm_candidate", "true"),
+            ("&& inputs.confirm_candidate", "|| inputs.confirm_candidate"),
             ("github.repository_owner == 'LATTIX-IO'", "github.repository_owner != 'LATTIX-IO'"),
             ("persist-credentials: false", "persist-credentials: true"),
             ("attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a", "attest-build-provenance@v3"),
