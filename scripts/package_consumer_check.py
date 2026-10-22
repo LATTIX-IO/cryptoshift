@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -64,7 +65,7 @@ def verify(toolchain: str | None) -> None:
     workspace = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
     version = workspace["workspace"]["package"]["version"]
     stem = f"cryptoshift-{version}"
-    command = ["cargo", *( [f"+{toolchain}"] if toolchain else [] )]
+    command = ["cargo", *([f"+{toolchain}"] if toolchain else [])]
     env = os.environ.copy()
     env["CARGO_NET_OFFLINE"] = "true"
     execute([*command, "package", "-p", "cryptoshift", "--offline", "--locked"], env=env)
@@ -76,7 +77,7 @@ def verify(toolchain: str | None) -> None:
     digest = hashlib.sha256(raw).hexdigest()
     with tempfile.TemporaryDirectory(prefix="cryptoshift-cleanroom-") as temporary:
         location = Path(temporary)
-        with tarfile.open(fileobj=__import__("io").BytesIO(raw), mode="r:gz") as archive:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
             members = archive.getmembers()
             if not members or len(members) > 2500:
                 raise RuntimeError("empty or oversized package file inventory")
@@ -124,7 +125,7 @@ def verify(toolchain: str | None) -> None:
             raise RuntimeError("detached consumer nondeterministic public output")
         if projection(first) != GOLDEN.read_text(encoding="utf-8"):
             raise RuntimeError("detached consumer semantic golden changed")
-        if not re.search(r"migration plan digest: sha256:[0-9a-f]{64}\\b", first):
+        if not re.search(r"migration plan digest: sha256:[0-9a-f]{64}\b", first):
             raise RuntimeError("missing canonical SHA-256 plan digest")
         print(f"package_identity=sha256:{digest}")
         print(f"consumer_output=sha256:{hashlib.sha256(first.encode()).hexdigest()}")
