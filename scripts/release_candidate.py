@@ -126,9 +126,10 @@ def workflow_errors(workflow: str) -> list[str]:
         "if: $" + "{{ github.repository_owner == 'LATTIX-IO' && "
         "github.ref == 'refs/heads/main' && inputs.confirm_candidate }}"
     )
-    if workflow.count(expected_if) != 1:
-        errors.append("candidate workflow requires exact owner/main/confirmation conjunction")
     job = job_lines(workflow, "candidate")
+    conditions = [line.strip() for line in job if line.startswith("    if:")]
+    if conditions != [expected_if]:
+        errors.append("candidate job requires exact owner/main/confirmation conjunction")
     if not executable_step(job, "Package and test detached consumer", "python3 scripts/package_consumer_check.py"):
         errors.append("candidate workflow must execute the packaged consumer")
     for required in (
