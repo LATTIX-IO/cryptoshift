@@ -1,0 +1,74 @@
+name: Cryptoshift release candidate evidence (manual, never publish)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact 40-character protected main commit to qualify
+        required: true
+        type: string
+      version:
+        description: Explicit semantic candidate version
+        required: true
+        type: string
+      confirm_candidate:
+        description: Confirm generation of nonpublishing candidate artifacts
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    name: Manual release candidate SBOM and provenance
+    if: ${{ github.repository_owner == 'LATTIX-IO' && github.ref == 'refs/heads/main' && inputs.confirm_candidate }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+      id-token: write
+      attestations: write
+    concurrency:
+      group: cryptoshift-candidate-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - name: Verify safe release settings
+        run: python3 scripts/release_safety.py --with-cargo
+      - name: Download exact locked dependencies
+        run: cargo fetch --locked
+      - name: Package and test detached consumer
+        run: python3 scripts/package_consumer_check.py
+      - name: Validate protected source and construct evidence
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_VERSION: ${{ inputs.version }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/release_candidate.py \
+            --expected-commit "$EXPECTED_COMMIT" \
+            --expected-version "$EXPECTED_VERSION" \
+            --output-dir dist/release-candidate \
+            --require-branch-gates
+      - name: Attest exact built crate provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
+        with:
+          subject-path: dist/release-candidate/*.crate
+      - name: Upload nonpublishing candidate evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cryptoshift-release-candidate-${{ inputs.version }}
+          path: dist/release-candidate/
+          if-no-files-found: error
+          retention-days: 30
