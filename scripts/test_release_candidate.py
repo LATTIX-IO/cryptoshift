@@ -87,6 +87,11 @@ class CandidateGateTests(unittest.TestCase):
         rules["rules"] = [x for x in rules["rules"] if x["type"] != "required_signatures"]
         self.assertTrue(ruleset_errors(rules))
 
+    def test_explicit_bypass_actors_rejected(self) -> None:
+        rules = valid_ruleset()
+        rules["bypass_actors"] = [{"actor_id": 42, "actor_type": "Team", "bypass_mode": "always"}]
+        self.assertTrue(ruleset_errors(rules))
+
     def test_review_bypass_and_other_merge_method_rejected(self) -> None:
         rules = valid_ruleset()
         review = next(x for x in rules["rules"] if x["type"] == "pull_request")
