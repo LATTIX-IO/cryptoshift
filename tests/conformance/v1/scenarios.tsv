@@ -1,0 +1,7 @@
+# Synthetic scenario definitions; E2 schema requires exactly five versioned scenarios.
+v1|scenario|system|algorithm|use|evidence|collection
+v1|transport|edge-gateway|ML-KEM-1024|ConfiguredProtocol|Direct|Complete
+v1|pki|pki-service|RSA-2048|ConfiguredProtocol|Direct|Complete
+v1|codesign|release-signer|ML-DSA-87|ActiveUse|Direct|Complete
+v1|kms|cloud-kms|RSA-2048|ActiveUse|Direct|Complete
+v1|vendor|vendor-connector|ML-KEM-1024|LibraryCapability|Inferred|Partial
