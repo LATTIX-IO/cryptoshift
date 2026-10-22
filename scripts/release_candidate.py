@@ -18,6 +18,8 @@ import subprocess
 import tomllib
 from urllib.request import Request, urlopen
 
+from release_safety import section_keys, job_lines, executable_step
+
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "LATTIX-IO/cryptoshift"
 RULESET_ID = 24680955
@@ -116,10 +118,19 @@ def read_live_ruleset() -> dict:
 def workflow_errors(workflow: str) -> list[str]:
     """Check the reviewed, nonpublishing manual workflow shape."""
     errors = []
-    if not re.search(r"(?m)^on:\n  workflow_dispatch:\n", workflow):
-        errors.append("candidate workflow must use workflow_dispatch")
-    if re.search(r"(?m)^  (?:push|pull_request|schedule|release):", workflow):
-        errors.append("candidate workflow must not start automatically")
+    if section_keys(workflow, "on") != ["workflow_dispatch"]:
+        errors.append("candidate workflow must have only workflow_dispatch")
+    if section_keys(workflow, "jobs") != ["candidate"]:
+        errors.append("candidate workflow must have exactly one job")
+    expected_if = (
+        "if: $" + "{{ github.repository_owner == 'LATTIX-IO' && "
+        "github.ref == 'refs/heads/main' && inputs.confirm_candidate }}"
+    )
+    if workflow.count(expected_if) != 1:
+        errors.append("candidate workflow requires exact owner/main/confirmation conjunction")
+    job = job_lines(workflow, "candidate")
+    if not executable_step(job, "Package and test detached consumer", "python3 scripts/package_consumer_check.py"):
+        errors.append("candidate workflow must execute the packaged consumer")
     for required in (
         "github.repository_owner == 'LATTIX-IO'",
         "github.ref == 'refs/heads/main'",
