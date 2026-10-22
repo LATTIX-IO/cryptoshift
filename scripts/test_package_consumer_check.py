@@ -4,7 +4,7 @@ from __future__ import annotations
 import tarfile
 import unittest
 
-from scripts.package_consumer_check import safe_path, projection
+from scripts.package_consumer_check import controlled_target, safe_path, projection
 
 
 class PackageConsumerChecks(unittest.TestCase):
@@ -12,6 +12,16 @@ class PackageConsumerChecks(unittest.TestCase):
         record = tarfile.TarInfo(path)
         record.type = member_type
         return record
+
+    def test_cargo_target_override_is_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            inherited = {"CARGO_TARGET_DIR": "/some/foreign/cache", "CARGO_NET_OFFLINE": "true"}
+            environment, location = controlled_target(root, inherited)
+            self.assertEqual(location, (root / "target").resolve())
+            self.assertEqual(environment["CARGO_TARGET_DIR"], str(location))
+            self.assertEqual(environment["CARGO_NET_OFFLINE"], "true")
+            self.assertEqual(inherited["CARGO_TARGET_DIR"], "/some/foreign/cache")
 
     def test_allow_exact_package_root_file_only(self) -> None:
         self.assertTrue(safe_path(self.member("cryptoshift-0.1.0/src/lib.rs"), "cryptoshift-0.1.0"))
