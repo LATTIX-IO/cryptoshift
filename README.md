@@ -33,6 +33,7 @@ See the [peer compatibility contract](docs/PEER_COMPATIBILITY.md) and [remediati
 
 The [Gate E2 conformance corpus](docs/CONFORMANCE.md) exercises a versioned synthetic enterprise estate, public end-to-end pipeline, hostile fixtures, seeded determinism and Windows/Linux replay. It does not validate native upstream transports or grant deployment authority.
 The [FOSS-450 atomic analysis API](docs/ANALYSIS_RESULTS.md) composes existing offline phase contracts into one all-or-nothing advisory result with typed status diagnostics and opt-in aggregate-only metrics. It does not authenticate source claims or authorize migration.
+Reproducible [phase scaling and benchmark methodology](docs/PERFORMANCE.md) is available for synthetic graph, SCC, risk, peer compatibility, remediation, advisory wave and plan workloads. The benchmark never approves cryptographic migrations and gates semantic identity rather than wall-clock performance.
 
 ## Development
 
