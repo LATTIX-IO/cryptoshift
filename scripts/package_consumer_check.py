@@ -51,6 +51,14 @@ def projection(output: str) -> str:
     ) + "\n"
 
 
+def controlled_target(root: Path, inherited: dict[str, str]) -> tuple[dict[str, str], Path]:
+    """Override any inherited build.target-dir with a fresh canonical target path."""
+    configured = dict(inherited)
+    target = (root / "target").resolve()
+    configured["CARGO_TARGET_DIR"] = str(target)
+    return configured, target
+
+
 def execute(command: list[str], *, env: dict[str, str]) -> str:
     print("verify-package:", " ".join(command), flush=True)
     done = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True, check=False)
@@ -70,8 +78,7 @@ def verify(toolchain: str | None) -> None:
     env["CARGO_NET_OFFLINE"] = "true"
     # Cargo config and CARGO_TARGET_DIR may redirect output. Fix the target
     # explicitly and reject a stale package from a prior run.
-    target_dir = (ROOT / "target").resolve()
-    env["CARGO_TARGET_DIR"] = str(target_dir)
+    env, target_dir = controlled_target(ROOT, env)
     package = target_dir / "package" / f"{stem}.crate"
     if package.exists():
         package.unlink()
