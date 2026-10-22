@@ -53,10 +53,53 @@ def ruleset_errors(ruleset: dict) -> list[str]:
         errors.append("required checks must be strict")
     if len(contexts) != len(set(contexts)):
         errors.append("duplicate required check contexts")
+    types = {rule.get("type") for rule in ruleset.get("rules", [])}
+    mandatory_types = {"deletion", "non_fast_forward", "required_linear_history",
+                       "required_signatures", "pull_request"}
+    if not mandatory_types.issubset(types):
+        errors.append("missing source-protection or review rules")
+    reviews = [rule for rule in ruleset.get("rules", []) if rule.get("type") == "pull_request"]
+    if len(reviews) != 1 or reviews[0].get("parameters", {}).get("required_review_thread_resolution") is not True:
+        errors.append("required PR review-thread resolution is absent")
+    if len(reviews) != 1 or reviews[0].get("parameters", {}).get("allowed_merge_methods") != ["squash"]:
+        errors.append("main must allow only squash merge")
     missing = sorted(REQUIRED.difference(contexts))
     if missing:
         errors.append("missing required checks: " + ", ".join(missing))
     return errors
+
+
+def check_run_errors(payload: dict) -> list[str]:
+    """Require newest exact-head GitHub Actions checks, not recycled status labels."""
+    found = {}
+    for run in payload.get("check_runs", []):
+        name = run.get("name")
+        if name not in REQUIRED:
+            continue
+        if run.get("app", {}).get("slug") != "github-actions":
+            continue
+        if "/actions/runs/" not in str(run.get("details_url", "")):
+            continue
+        moment = run.get("completed_at") or run.get("started_at") or ""
+        if name not in found or moment > found[name][0]:
+            found[name] = (moment, run.get("status"), run.get("conclusion"))
+    errors = []
+    for name in sorted(REQUIRED):
+        if name not in found:
+            errors.append("missing exact-commit GitHub Actions check: " + name)
+        elif found[name][1:] != ("completed", "success"):
+            errors.append("latest GitHub Actions check not green: " + name)
+    return errors
+
+
+def read_live_checks(commit: str) -> dict:
+    url = f"https://api.github.com/repos/{REPO}/commits/{commit}/check-runs?per_page=100"
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "cryptoshift-release-candidate"}
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    with urlopen(Request(url, headers=headers), timeout=15) as response:
+        return json.load(response)
 
 
 def read_live_ruleset() -> dict:
@@ -90,6 +133,7 @@ def validated_inputs(expected_commit: str, expected_version: str, require_rules:
         if os.environ.get("GITHUB_REPOSITORY") != REPO or os.environ.get("GITHUB_REF") != "refs/heads/main":
             raise ValueError("candidate evidence can run only on owner-controlled main")
         errors = ruleset_errors(read_live_ruleset())
+        errors.extend(check_run_errors(read_live_checks(expected_commit)))
         if errors:
             raise ValueError("; ".join(errors))
     return version, git("show", "-s", "--format=%cI", "HEAD")
@@ -137,7 +181,7 @@ def sbom(lockfile: bytes, version: str, commit: str, timestamp: str, archive_sha
 
 def build(expected_commit: str, expected_version: str, output: Path, require_rules: bool) -> None:
     version, timestamp = validated_inputs(expected_commit, expected_version, require_rules)
-    if not (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").find(f"## [{version}]") >= 0:
+    if f"## [{version}]" not in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"):
         raise ValueError("missing explicit versioned release notes")
     package = ROOT / "target" / "package" / f"cryptoshift-{version}.crate"
     raw = package.read_bytes()
