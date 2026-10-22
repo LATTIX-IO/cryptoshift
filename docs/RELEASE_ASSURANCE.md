@@ -12,8 +12,8 @@ The manual workflow accepts an explicit full 40-character protected-main commit,
 
 1. Run only on the original `LATTIX-IO/cryptoshift` repository's `refs/heads/main`, via `workflow_dispatch`. It cannot start on a push, pull request or scheduled job.
 2. Verify the actual Git checkout matches the caller-provided commit and Cargo manifest version. Reject short SHAs and mismatched versions.
-3. Fetch active main ruleset `24680955`. Require strict, independent `Rust checks`, `Rust 1.85 MSRV`, `Supply chain and SemVer`, `Windows Rust stable conformance` and `Windows Rust 1.85.0 conformance`, along with signed commits, linear history, no force-push/deletion, squash-only merges and resolved review threads.
-4. Inspect the newest GitHub Actions check-run for **each** required context on the exact commit. Any missing, untrusted-app or non-success context fails closed. Neither a prior green run nor an unbound status name is sufficient.
+3. Fetch active main ruleset `24680955`; require explicit branch target `refs/heads/main`, no excluded branch patterns, and an **explicitly visible empty** bypass-actor list (missing metadata blocks qualification). Require strict, independent `Rust checks`, `Rust 1.85 MSRV`, `Supply chain and SemVer`, `Windows Rust stable conformance` and `Windows Rust 1.85.0 conformance`, along with signed commits, linear history, no force-push/deletion, squash-only merges and resolved review threads.
+4. Enumerate **all** GitHub Actions check-runs for the exact commit (bounded paginated API response), selecting the latest job by increasing check-run **ID**, not completion timestamp. Require each of the five contexts to be from the official Actions app, bound to the exact commit and repository, and completed successfully. Truncated/missing API data or a newer failed, queued or in-progress run fails closed; an older green run cannot override it.
 5. Verify the `publish = false` crate guard remains in place. The workflow contains no registry credentials or publishing action.
 6. Execute the FOSS-454 actual-archive offline consumer, then construct a bounded and content-addressed candidate from the generated `.crate`.
 
@@ -27,7 +27,7 @@ An eligible manual run creates these files in `dist/release-candidate/`:
 | --- | --- |
 | `cryptoshift-<version>.crate` | Source package built from exactly the verified Cargo workspace. |
 | `sbom.spdx.json` | SPDX 2.3 package inventory based on Cargo.lock with original registry checksums. License fields are `NOASSERTION` until independently supported by package metadata and `cargo deny`; this is not a license certification. |
-| `provenance-unsigned.json` | Deterministic local source/lock/conformance/performance/consumer hashes and build parameters. **Unsigned** metadata is not a source attestation. |
+| `provenance-unsigned.json` | Unsigned in-toto Statement/SLSA v1-shaped metadata containing pinned source and file SHA-256 material descriptors under `buildDefinition.resolvedDependencies` (not an invalid `materials` field). **Unsigned** metadata is not a source attestation or signed provenance. |
 | `CHANGELOG.md` | Reviewed, exact-version draft release notes. |
 
 The manual workflow then invokes the pinned `actions/attest-build-provenance` action with scoped OIDC and GitHub attestation permissions, binding its independent attestation to the exact `.crate` SHA-256. It uploads the candidate files with a pinned artifact action and finite retention.

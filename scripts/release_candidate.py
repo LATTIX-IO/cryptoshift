@@ -48,11 +48,26 @@ def ruleset_errors(ruleset: dict) -> list[str]:
     controls = [rule for rule in ruleset.get("rules", []) if rule.get("type") == "required_status_checks"]
     if ruleset.get("enforcement") != "active" or len(controls) != 1:
         return ["missing active required-status-check rule"]
-    if ruleset.get("bypass_actors"):
-        return ["main protection contains bypass actors; review and eliminate exception before release"]
+    errors = []
+    # The API may omit bypass actors for read-only credentials. Missing is
+    # unverifiable, not equivalent to an empty/bypass-free authorization list.
+    actors = ruleset.get("bypass_actors")
+    if not isinstance(actors, list):
+        errors.append("bypass actor visibility unavailable; require independently verified admin-readable ruleset")
+    elif actors:
+        errors.append("main protection contains bypass actors; eliminate exception before release")
+    if ruleset.get("target") != "branch":
+        errors.append("required governance ruleset must target branches")
+    conditions = ruleset.get("conditions")
+    ref_name = conditions.get("ref_name") if isinstance(conditions, dict) else None
+    includes = ref_name.get("include") if isinstance(ref_name, dict) else None
+    excludes = ref_name.get("exclude") if isinstance(ref_name, dict) else None
+    if not isinstance(includes, list) or "refs/heads/main" not in includes:
+        errors.append("required governance ruleset does not explicitly protect refs/heads/main")
+    if not isinstance(excludes, list) or excludes:
+        errors.append("required governance ruleset has unknown or nonempty branch exclusions")
     params = controls[0].get("parameters", {})
     contexts = [x.get("context") for x in params.get("required_status_checks", [])]
-    errors = []
     if params.get("strict_required_status_checks_policy") is not True:
         errors.append("required checks must be strict")
     if len(contexts) != len(set(contexts)):
@@ -73,38 +88,77 @@ def ruleset_errors(ruleset: dict) -> list[str]:
     return errors
 
 
-def check_run_errors(payload: dict) -> list[str]:
-    """Require newest exact-head GitHub Actions checks, not recycled status labels."""
+def check_run_errors(payload: dict, expected_commit: str) -> list[str]:
+    """Require the newest GitHub Actions check ID for every exact-head context.
+
+    GitHub's check-run IDs increase with creation. Completed timestamps are
+    *not* ordering identities: an older slow success can finish after a
+    newer failed or queued run. Missing/truncated responses fail closed.
+    """
+    checks = payload.get("check_runs")
+    if not isinstance(checks, list) or payload.get("total_count") != len(checks):
+        return ["incomplete or unverified exact-commit check-run enumeration"]
     found = {}
-    for run in payload.get("check_runs", []):
+    errors = []
+    for run in checks:
         name = run.get("name")
         if name not in REQUIRED:
             continue
-        if run.get("app", {}).get("slug") != "github-actions":
+        app = run.get("app")
+        if not isinstance(app, dict) or app.get("slug") != "github-actions":
             continue
-        if "/actions/runs/" not in str(run.get("details_url", "")):
+        run_id = run.get("id")
+        if type(run_id) is not int or run_id <= 0:
+            errors.append("missing official check-run creation identity: " + name)
             continue
-        moment = run.get("completed_at") or run.get("started_at") or ""
-        if name not in found or moment > found[name][0]:
-            found[name] = (moment, run.get("status"), run.get("conclusion"))
-    errors = []
+        if run.get("head_sha") != expected_commit:
+            errors.append("official check-run does not match exact source commit: " + name)
+            continue
+        details = str(run.get("details_url", ""))
+        if not re.fullmatch(
+            r"https://github[.]com/LATTIX-IO/cryptoshift/actions/runs/[0-9]+/job/[0-9]+",
+            details,
+        ):
+            errors.append("official check-run has an untrusted origin: " + name)
+            continue
+        if name not in found or run_id > found[name][0]:
+            found[name] = (run_id, run.get("status"), run.get("conclusion"))
     for name in sorted(REQUIRED):
         if name not in found:
             errors.append("missing exact-commit GitHub Actions check: " + name)
         elif found[name][1:] != ("completed", "success"):
-            errors.append("latest GitHub Actions check not green: " + name)
+            errors.append("newest GitHub Actions check not green: " + name)
     return errors
 
-
 def read_live_checks(commit: str) -> dict:
-    url = f"https://api.github.com/repos/{REPO}/commits/{commit}/check-runs?per_page=100"
+    """Enumerate all exact-source check runs with a finite fail-closed bound."""
+    base = f"https://api.github.com/repos/{REPO}/commits/{commit}/check-runs"
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "cryptoshift-release-candidate"}
     token = os.environ.get("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = "Bearer " + token
-    with urlopen(Request(url, headers=headers), timeout=15) as response:
-        return json.load(response)
-
+    checks = []
+    total = None
+    for page in range(1, 11):
+        url = f"{base}?per_page=100&page={page}"
+        with urlopen(Request(url, headers=headers), timeout=15) as response:
+            payload = json.load(response)
+        count = payload.get("total_count")
+        part = payload.get("check_runs")
+        if type(count) is not int or count < 0 or not isinstance(part, list):
+            raise ValueError("unverifiable GitHub check-run enumeration")
+        if total is None:
+            total = count
+            if total > 1000:
+                raise ValueError("check-run enumeration exceeds bounded release-gate scope")
+        if count != total or not part and len(checks) < total:
+            raise ValueError("GitHub check-run enumeration changed or is incomplete")
+        checks.extend(part)
+        if len(checks) == total:
+            return {"total_count": total, "check_runs": checks}
+        if len(checks) > total:
+            raise ValueError("GitHub check-run enumeration contains duplicate pages")
+    raise ValueError("GitHub check-run enumeration was truncated")
 
 def read_live_ruleset() -> dict:
     """Read the active GitHub governance rule; no app-admin mutation is possible."""
@@ -183,7 +237,7 @@ def validated_inputs(expected_commit: str, expected_version: str, require_rules:
         if os.environ.get("GITHUB_REPOSITORY") != REPO or os.environ.get("GITHUB_REF") != "refs/heads/main":
             raise ValueError("candidate evidence can run only on owner-controlled main")
         errors = ruleset_errors(read_live_ruleset())
-        errors.extend(check_run_errors(read_live_checks(expected_commit)))
+        errors.extend(check_run_errors(read_live_checks(expected_commit), expected_commit))
         if errors:
             raise ValueError("; ".join(errors))
     return version, git("show", "-s", "--format=%cI", "HEAD")
@@ -229,6 +283,41 @@ def sbom(lockfile: bytes, version: str, commit: str, timestamp: str, archive_sha
     }
 
 
+
+def provenance_statement(
+    version: str, commit: str, package_name: str, archive_sha: str,
+    material_digests: dict[str, str], invocation_id: str,
+) -> dict:
+    """Unsigned SLSA v1 shape: source and file inputs are resolvedDependencies."""
+    dependencies = [
+        {"uri": f"git+https://github.com/{REPO}",
+         "digest": {"gitCommit": commit}},
+    ]
+    for path, digest in sorted(material_digests.items()):
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError("invalid content hash in release candidate materials")
+        dependencies.append({
+            "uri": f"git+https://github.com/{REPO}@{commit}#{path}",
+            "digest": {"sha256": digest},
+        })
+    return {
+        "_type": "https://in-toto.io/Statement/v1",
+        "subject": [{"name": package_name, "digest": {"sha256": archive_sha}}],
+        "predicateType": "https://slsa.dev/provenance/v1",
+        "predicate": {
+            "buildDefinition": {
+                "buildType": f"https://github.com/{REPO}/.github/workflows/release-candidate.yml",
+                "externalParameters": {"version": version, "commit": commit},
+                "resolvedDependencies": dependencies,
+            },
+            "runDetails": {
+                "builder": {"id": "cryptoshift-manual-candidate-v1"},
+                "metadata": {"invocationId": invocation_id},
+            },
+        },
+    }
+
+
 def build(expected_commit: str, expected_version: str, output: Path, require_rules: bool) -> None:
     version, timestamp = validated_inputs(expected_commit, expected_version, require_rules)
     if f"## [{version}]" not in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"):
@@ -243,28 +332,11 @@ def build(expected_commit: str, expected_version: str, output: Path, require_rul
     materials = {}
     for file in ("Cargo.lock", "tests/conformance/v1/full_pipeline.golden",
                  "tests/perf/v1/identity.golden", "tests/acceptance/packaged-consumer.golden"):
-        materials[file] = "sha256:" + sha((ROOT / file).read_bytes())
-    predicate = {
-        "_type": "https://in-toto.io/Statement/v1",
-        "subject": [{"name": package.name, "digest": {"sha256": archive_sha}}],
-        "predicateType": "https://slsa.dev/provenance/v1",
-        "predicate": {
-            "buildDefinition": {
-                "buildType": "https://github.com/LATTIX-IO/cryptoshift/.github/workflows/release-candidate.yml",
-                "externalParameters": {"version": version, "commit": expected_commit},
-                "resolvedDependencies": [
-                    {"uri": "git+https://github.com/LATTIX-IO/cryptoshift", "digest": {"gitCommit": expected_commit}}
-                ],
-            },
-            "runDetails": {
-                "builder": {"id": "cryptoshift-manual-candidate-v1"},
-                "metadata": {"invocationId": os.environ.get("GITHUB_RUN_ID", "local")},
-            },
-            "materials": materials,
-        },
-        "unsigned": True,
-        "warning": "Local metadata is NOT signed or independently authenticated. GitHub attestation is a distinct workflow step.",
-    }
+        materials[file] = sha((ROOT / file).read_bytes())
+    predicate = provenance_statement(
+        version, expected_commit, package.name, archive_sha, materials,
+        os.environ.get("GITHUB_RUN_ID", "local"),
+    )
     output.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(package, output / package.name)
     (output / "sbom.spdx.json").write_bytes(canonical(manifest))

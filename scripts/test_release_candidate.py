@@ -10,16 +10,21 @@ from release_candidate import (
     check_run_errors,
     ruleset_errors,
     sbom,
+    provenance_statement,
     workflow_errors,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-candidate.yml"
+TEST_COMMIT = "a" * 40
 
 
 def valid_ruleset() -> dict:
     return {
         "enforcement": "active",
+        "target": "branch",
+        "conditions": {"ref_name": {"include": ["refs/heads/main"], "exclude": []}},
+        "bypass_actors": [],
         "rules": [
             {"type": name}
             for name in ("deletion", "non_fast_forward", "required_linear_history", "required_signatures")
@@ -44,8 +49,11 @@ def valid_ruleset() -> dict:
 
 def valid_checkruns() -> dict:
     return {
+        "total_count": len(REQUIRED),
         "check_runs": [
             {
+                "id": 1000 + index,
+                "head_sha": TEST_COMMIT,
                 "name": name,
                 "app": {"slug": "github-actions"},
                 "status": "completed",
@@ -54,7 +62,7 @@ def valid_checkruns() -> dict:
                 "completed_at": "2026-10-21T10:01:00Z",
                 "details_url": "https://github.com/LATTIX-IO/cryptoshift/actions/runs/123",
             }
-            for name in sorted(REQUIRED)
+            for index, name in enumerate(sorted(REQUIRED))
         ]
     }
 
@@ -62,7 +70,7 @@ def valid_checkruns() -> dict:
 class CandidateGateTests(unittest.TestCase):
     def test_valid_protections(self) -> None:
         self.assertEqual(ruleset_errors(valid_ruleset()), [])
-        self.assertEqual(check_run_errors(valid_checkruns()), [])
+        self.assertEqual(check_run_errors(valid_checkruns(), TEST_COMMIT), [])
 
     def test_each_missing_required_status_fails(self) -> None:
         for missing in REQUIRED:
@@ -77,7 +85,7 @@ class CandidateGateTests(unittest.TestCase):
                 checkruns["check_runs"] = [
                     item for item in checkruns["check_runs"] if item["name"] != missing
                 ]
-                self.assertTrue(check_run_errors(checkruns))
+                self.assertTrue(check_run_errors(checkruns, TEST_COMMIT))
 
     def test_non_strict_or_unsigned_main_rejected(self) -> None:
         rules = valid_ruleset()
@@ -103,14 +111,84 @@ class CandidateGateTests(unittest.TestCase):
 
     def test_forged_or_stale_check_cannot_override_last_failure(self) -> None:
         payload = valid_checkruns()
+        # Older success finishes after the newer failed run. Created ID
+        # wins, even though the older completion timestamp is later.
+        original = payload["check_runs"][0]
+        original["completed_at"] = "2026-10-21T10:30:00Z"
         payload["check_runs"].append({
-            **deepcopy(payload["check_runs"][0]),
+            **deepcopy(original),
+            "id": 9000,
             "conclusion": "failure",
             "completed_at": "2026-10-21T10:05:00Z",
         })
-        self.assertTrue(check_run_errors(payload))
+        payload["total_count"] += 1
+        self.assertTrue(check_run_errors(payload, TEST_COMMIT))
+        payload["check_runs"][-1]["status"] = "queued"
+        payload["check_runs"][-1]["conclusion"] = None
+        payload["check_runs"][-1]["started_at"] = None
+        payload["check_runs"][-1]["completed_at"] = None
+        self.assertTrue(check_run_errors(payload, TEST_COMMIT))
         payload["check_runs"][-1]["app"] = {"slug": "untrusted-bot"}
-        self.assertEqual(check_run_errors(payload), [])
+        self.assertEqual(check_run_errors(payload, TEST_COMMIT), [])
+
+    def test_main_ruleset_scope_and_bypass_visibility_are_mandatory(self) -> None:
+        for corrupt in (
+            lambda r: r.pop("target"),
+            lambda r: r.update(target="tag"),
+            lambda r: r.pop("conditions"),
+            lambda r: r["conditions"]["ref_name"].update(include=["refs/heads/release"]),
+            lambda r: r["conditions"]["ref_name"].update(include=["~DEFAULT_BRANCH"]),
+            lambda r: r["conditions"]["ref_name"].update(exclude=["refs/heads/main"]),
+            lambda r: r.pop("bypass_actors"),
+            lambda r: r.update(bypass_actors=None),
+        ):
+            rules = valid_ruleset()
+            corrupt(rules)
+            self.assertTrue(ruleset_errors(rules))
+
+    def test_checks_require_untruncated_exact_head_official_run_ids(self) -> None:
+        for corrupt in (
+            lambda x: x.update(total_count=99),
+            lambda x: x["check_runs"][0].pop("id"),
+            lambda x: x["check_runs"][0].update(head_sha="b" * 40),
+            lambda x: x["check_runs"][0].update(
+                details_url="https://attacker.invalid/actions/runs/123/job/987",
+            ),
+        ):
+            payload = valid_checkruns()
+            corrupt(payload)
+            self.assertTrue(check_run_errors(payload, TEST_COMMIT))
+
+    def test_signed_predicate_schema_is_not_claimed_by_unsigned_metadata(self) -> None:
+        digests = {
+            "Cargo.lock": "b" * 64,
+            "tests/conformance/v1/full_pipeline.golden": "c" * 64,
+            "tests/perf/v1/identity.golden": "d" * 64,
+            "tests/acceptance/packaged-consumer.golden": "e" * 64,
+        }
+        statement = provenance_statement(
+            "0.1.0", TEST_COMMIT, "cryptoshift-0.1.0.crate",
+            "f" * 64, digests, "synthetic-run",
+        )
+        self.assertEqual(
+            set(statement), {"_type", "subject", "predicateType", "predicate"},
+        )
+        predicate = statement["predicate"]
+        self.assertNotIn("materials", predicate)
+        self.assertEqual(
+            statement["predicateType"], "https://slsa.dev/provenance/v1",
+        )
+        deps = predicate["buildDefinition"]["resolvedDependencies"]
+        self.assertEqual(len(deps), len(digests) + 1)
+        self.assertEqual(deps[0]["digest"]["gitCommit"], TEST_COMMIT)
+        for path, digest in digests.items():
+            self.assertIn({
+                "uri": f"git+https://github.com/LATTIX-IO/cryptoshift@{TEST_COMMIT}#{path}",
+                "digest": {"sha256": digest},
+            }, deps)
+        with self.assertRaises(ValueError):
+            provenance_statement("0.1.0", TEST_COMMIT, "crate", "f" * 64,
+                                 {"Cargo.lock": "malformed"}, "synthetic-run")
 
     def test_workflow_is_manual_pinned_and_nonpublishing(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
