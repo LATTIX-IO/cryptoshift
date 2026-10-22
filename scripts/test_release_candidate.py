@@ -60,7 +60,7 @@ def valid_checkruns() -> dict:
                 "conclusion": "success",
                 "started_at": "2026-10-21T10:00:00Z",
                 "completed_at": "2026-10-21T10:01:00Z",
-                "details_url": "https://github.com/LATTIX-IO/cryptoshift/actions/runs/123",
+                "details_url": f"https://github.com/LATTIX-IO/cryptoshift/actions/runs/123/job/{1000 + index}",
             }
             for index, name in enumerate(sorted(REQUIRED))
         ]
