@@ -1,6 +1,6 @@
 # CI verification architecture (FOSS-471)
 
-The two checks named **Rust checks** and **Supply chain and SemVer** are both mandatory for PRs targeting `main` and for pushes to `main`. Configure branch rules to require BOTH distinct check names. A successful Rust check alone is not a merge authorization.
+Five checks must independently succeed for complete protected-main release qualification: **Rust checks**, **Rust 1.85 MSRV**, **Supply chain and SemVer**, **Windows Rust stable conformance**, and **Windows Rust 1.85.0 conformance**. Every required status must be registered in the active main ruleset, with strict up-to-date policy. The current incomplete live ruleset is tracked as FOSS-509 and must be corrected before registry publication. A single green Rust check is never a complete release authorization.
 
 ## Independent jobs
 
@@ -15,6 +15,8 @@ The two checks named **Rust checks** and **Supply chain and SemVer** are both ma
 The cached `~/.cargo/bin` entries are checked by executing each tool's `--version` before use. Caches are saved ONLY on a trusted push to protected `main` (`save-if`), never on a pull request, preventing PR branches from seeding the trusted shared tool cache. A PR can restore cache from `main`. The pinned cache action is not dynamically resolved. Without a cache, the job builds all three pinned tools from sources and then executes all audit commands.
 
 The existing Rust workspace cache is separately scoped to its build job and is also saved only from `main`.
+
+FOSS-454 adds source-package acceptance under stable and Rust 1.85. Its checker verifies the actual `.crate` archive and builds a synthetic developer example using a temporary clean-room Cargo project outside the workspace. It uses `--offline` and `--frozen`, checks a fixed semantic golden, and never publishes.
 
 These are compilation caches, not independently signed binary supply-chain attestations. To increase assurance later, replace them with a provenance-attested binary distribution plus verified digest. Current safety relies on protected-main writers, exact tool-version checks and pinned installer inputs.
 
