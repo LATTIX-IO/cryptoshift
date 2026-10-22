@@ -18,7 +18,7 @@ import subprocess
 import tomllib
 from urllib.request import Request, urlopen
 
-from release_safety import section_keys, job_lines, executable_step
+from release_safety import section_keys, job_lines, named_step, executable_step
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "LATTIX-IO/cryptoshift"
