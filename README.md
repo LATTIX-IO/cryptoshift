@@ -32,6 +32,7 @@ proofs or authorize migrations. No public crates.io release is authorized.
 See the [peer compatibility contract](docs/PEER_COMPATIBILITY.md) and [remediation action contract](docs/REMEDIATION_ACTIONS.md) for evidence and authorization limitations. See the [candidate wave planning contract](docs/WAVE_PLANNING.md) for SCC capacity and review-only states. The [immutable migration plan contract](docs/MIGRATION_PLAN.md) describes source digests, risk and exception authority limits. The [neutral adapter contract](docs/NEUTRAL_ADAPTERS.md) defines the bounded Cryptoshift-owned fixture boundary and explicitly does not claim a released upstream Cryptomap/Cryptopolicy wire integration.
 
 The [Gate E2 conformance corpus](docs/CONFORMANCE.md) exercises a versioned synthetic enterprise estate, public end-to-end pipeline, hostile fixtures, seeded determinism and Windows/Linux replay. It does not validate native upstream transports or grant deployment authority.
+The [FOSS-450 atomic analysis API](docs/ANALYSIS_RESULTS.md) composes existing offline phase contracts into one all-or-nothing advisory result with typed status diagnostics and opt-in aggregate-only metrics. It does not authenticate source claims or authorize migration.
 
 ## Development
 
