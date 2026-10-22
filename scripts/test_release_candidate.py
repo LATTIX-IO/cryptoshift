@@ -233,7 +233,7 @@ class CandidateGateTests(unittest.TestCase):
         def response(request, timeout=15):
             url = request.full_url
             calls.append(url)
-            payload = first if "page=1" in url else second
+            payload = first if url.endswith("&page=1") else second
             return io.BytesIO(json.dumps(payload).encode())
 
         with patch("release_candidate.urlopen", side_effect=response):
