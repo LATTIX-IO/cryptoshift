@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "cryptoshift library for the cryptoshift project."
+description = "Offline evidence-bound cryptographic migration and post-quantum transition planning"
 readme = "README.md"
 
 # Publishing is prohibited until reviewed release work FOSS-456.

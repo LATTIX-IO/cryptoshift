@@ -167,6 +167,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("blockers: {}", report.blockers().len());
     println!("proposed actions: {}", report.actions().len());
     println!("digest: {}", report.digest().as_identifier());
+    // The public all-or-nothing runner must preserve the manual plan's
+    // semantic identity and retain the same unverified state.
+    let atomic = AnalysisRunner::analyze(
+        &AnalysisRequest {
+            inventory: &inventory,
+            graph: &graph,
+            target: &target,
+            expected_inventory_digest: inventory.export(&limits)?.digest,
+            expected_graph_digest: graph.fingerprint(),
+            expected_target_digest: target.digest(),
+            compatibilities: &[],
+            capability_catalogs: &[],
+            quantum: &[],
+            context: &[],
+            scoring: None,
+            evaluated_at_unix_secs: at,
+            capacity_systems_per_wave: 1,
+            max_waves: 1,
+            submitted_for_review_units: &[],
+            exceptions: &[],
+            include_metrics: true,
+        },
+        &limits,
+    );
+    if atomic.outcome() != AnalysisOutcome::Partial
+        || atomic.plan().map(MigrationPlanDraft::digest) != Some(plan.digest())
+        || atomic.metrics().is_none()
+    {
+        return Err("atomic planning must match the manually pinned advisory plan".into());
+    }
+    // A forged upstream graph fingerprint cannot return a partial draft.
+    let rejected = AnalysisRunner::analyze(
+        &AnalysisRequest {
+            inventory: &inventory,
+            graph: &graph,
+            target: &target,
+            expected_inventory_digest: inventory.export(&limits)?.digest,
+            expected_graph_digest: SnapshotDigest::from_bytes([0; 32]),
+            expected_target_digest: target.digest(),
+            compatibilities: &[],
+            capability_catalogs: &[],
+            quantum: &[],
+            context: &[],
+            scoring: None,
+            evaluated_at_unix_secs: at,
+            capacity_systems_per_wave: 1,
+            max_waves: 1,
+            submitted_for_review_units: &[],
+            exceptions: &[],
+            include_metrics: true,
+        },
+        &limits,
+    );
+    if rejected.outcome() != AnalysisOutcome::Failed
+        || rejected.plan().is_some()
+        || rejected.metrics().is_some()
+    {
+        return Err("forged plan input pins must fail atomically".into());
+    }
+    println!("atomic analysis state: {:?}", atomic.outcome());
+    println!("forged graph pin: {:?}", rejected.outcome());
     println!("This is not an authorization to execute, migrate, or approve changes.");
     Ok(())
 }

@@ -1,9 +1,21 @@
 //! Deterministic cryptographic-migration planning contracts.
 //!
-//! This early, unpublished library includes trust-boundary preflight plus a
-//! validated, canonical binary inventory snapshot contract. Its snapshots retain
-//! evidence and collection incompleteness; they are not authenticated observations.
-//! This crate does not yet evaluate policies or generate migration plans.
+//! This unpublished Rust library validates versioned inventory and evidence
+//! graphs, analyzes dependency SCCs and cryptographic risk, models desired
+//! post-quantum profiles and source-qualified vendor capabilities, and generates
+//! immutable non-executing migration plans with explicit unresolved gates.
+//!
+//! [`AnalysisRunner`] composes topology, risk, remediation, advisory waves and a
+//! source-pinned [`MigrationPlanDraft`] into an atomic result. Input digests bind
+//! bytes and scope, but **do not authenticate** collectors, vendors, peers,
+//! policy approvals, PKI, source claims or control-plane authority.
+//! Unverified capability evidence remains `Partial` in v1. The public
+//! `Complete` and `Warnings` enum cases are reserved for future trusted
+//! evidence support and cannot currently be returned by the runner.
+//!
+//! For a complete tested example, run
+//! `cargo run -p cryptoshift --example migration_plan --locked`. The same
+//! example also runs outside this workspace against the *packaged* crate.
 //!
 //! # Example
 //!
