@@ -36,7 +36,7 @@ jobs:
           fetch-depth: 0
       - name: Mint ephemeral repository-scoped ruleset audit token
         id: ruleset-token
-        uses: actions/create-github-app-token@7e473efe3cb98aa54f8d4bac15400b15fad77d94 # v2.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ vars.CRYPTOSHIFT_RULESET_AUDIT_APP_CLIENT_ID }}
           private-key: ${{ secrets.CRYPTOSHIFT_RULESET_AUDIT_APP_PRIVATE_KEY }}
